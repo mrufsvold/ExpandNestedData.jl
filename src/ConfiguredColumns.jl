@@ -27,9 +27,9 @@ function make_column_def_child_copies(column_defs, name)
     (col -> ColumnDefinition(
         (@view field_path(col)[2:end]), 
         get_column_name(col),
-        col.expand_array,
-        col.value_if_missing,
-        col.vector_type
+        expand_array(col),
+        default_value(col),
+        vector_type(col)
         ))
 end
 
@@ -44,18 +44,27 @@ function make_path_graph(data::D, column_defs::Vector{T}, left_siblings_product)
     generators = Dict{Symbol, ColumnGenerator}()
     for name in names
         if name in has_children
-            # This creates a view of configured columns to pass down
             child_columns = make_column_def_child_copies(column_defs, name)
-            # TODO need to handle what to do if a who limb of the graph is missing
-            child_node = make_path_graph(data[name], child_columns, records)
-
-            # We need to cycle through each generator as many times as the product of all the 
-            # sibling we've found so far. This makes the first sibling cycle fastest and each 
-            # successive sibling repeat each element once for each cycle of its sibling to the "left"
-            for (column_name, generator) in pairs(child_node.generators)
-                generators[column_name] = repeat_generator(generator, left_siblings_product)
+            if name in keys(data)
+                # This creates a view of configured columns to pass down
+                child_node = make_path_graph(data[name], child_columns, records)
+                # Cycle through each generator as many times as the product of all the 
+                # sibling we've found so far. This makes the first sibling cycle fastest and each 
+                # successive sibling repeat each element once for each cycle of its sibling to the "left"
+                for (column_name, generator) in pairs(child_node.generators)
+                    generators[column_name] = repeat_generator(generator, left_siblings_product)
+                end
+                records *= child_node.length
+            else
+                # TODO this could be refactored to return a tuple of like child_node 
+                # then we wouldn't have to duplicate lines 54-57
+                missing_columns = child_columns .|> (c -> (get_column_name(c), default_value(c)))
+                for (col_name, val) in missing_columns
+                    generators[col_name] = repeat_generator(
+                        make_path_graph(val, false, left_siblings_product, true),
+                        left_siblings_product)
+                end
             end
-            records *= child_node.length
         else
             # If we don't have any children, we need to make leaf nodes
             index = findfirst(first_path_name_is(name), column_defs)
