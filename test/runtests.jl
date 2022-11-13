@@ -29,11 +29,14 @@ using Test, Tables, JSON3, NormalizeDict
     }
     """)
     columns_defs = [
+        NormalizeDict.ColumnDefinition([:d]),
         NormalizeDict.ColumnDefinition([:a, :b]; expand_array=true),
         NormalizeDict.ColumnDefinition([:a, :c]),
-        NormalizeDict.ColumnDefinition([:d])
+        NormalizeDict.ColumnDefinition([:e, :f]; value_if_missing="Missing branch")
         ]
-    expected_table = (a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], d=[4,4,4,4,4])
+    expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
+        e_f = repeat(["Missing branch"], 5)
+    )
     @test isequal(NormalizeDict.normalize(test_body, columns_defs), expected_table)
 
     simple_test_body = """
@@ -48,6 +51,7 @@ using Test, Tables, JSON3, NormalizeDict
     ]
     """
     expected_simple_table = (data_E=[7,8,7,8] , data_D=[1,2,1,2])
+    @show NormalizeDict.normalize(test_body, columns_defs)
     @test isequal(NormalizeDict.normalize(test_body, columns_defs), expected_table)
 
 end
