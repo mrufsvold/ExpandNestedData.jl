@@ -21,10 +21,13 @@ abstract type AbstractInstruction end
 Base.@kwdef mutable struct ColumnInstructions
     steps::Channel{AbstractInstruction} = Channel{AbstractInstruction}(100)
     column_length::Int64 = 0
+    el_type::Type = Any
 end
 column_length(c::ColumnInstructions) = c.column_length
 # Get the steps from the ColumnInstructions object
 steps(col::ColumnInstructions) = col.steps
+el_type(col::ColumnInstructions) = col.el_type
+set_el_type!(col::ColumnInstructions, t::Type) = (col.el_type = t)
 
 """Fallback function for adding a new Instruction to a ColumnInstructions"""
 add_step!(c::ColumnInstructions, step::AbstractInstruction) = put!(c.steps, step)
@@ -32,7 +35,10 @@ add_step!(c::ColumnInstructions, step::AbstractInstruction) = put!(c.steps, step
 struct Seed <: AbstractInstruction
     value
 end
-add_step!(c::ColumnInstructions, s::Seed) = put!(steps(c), s)
+function add_step!(c::ColumnInstructions, s::Seed)
+    set_el_type!(c, typeof(s.value))
+    put!(steps(c), s)
+end
 apply(::Nothing, step::Seed) = step.value
 
 """Wrap all current values in an array so that it has only one "element" """
@@ -67,6 +73,7 @@ end
 function add_step!(col::ColumnInstructions, s::Insert)
     put!(steps(col), s)
     col.column_length += column_length(s.column)
+    set_el_type!(col, Union{el_type(col), el_type(s.column)}) 
 end
 apply(curr, s::Insert) = flatten((curr , make_generator(s.column)))
 
@@ -75,17 +82,15 @@ function stack(column1, columns2)
     return column1
 end
 
-function init_column(data)
+function init_column(data, wrap=true)
     col = ColumnInstructions()
     add_step!(col, Seed(data))
-    add_step!(col, Wrap())
+    wrap && add_step!(col, Wrap())
     return col
 end
 
 function missing_column(default, len)
-    col = ColumnInstructions()
-    add_step!(col, Seed(default))
-    add_step!(col, Wrap())
+    col = init_column(default)
     add_step!(col, Cycle(len))
     return col
 end
@@ -226,7 +231,7 @@ function normalize(data)
     for (i, name) in enumerate(names)
         col_gen = make_generator(columns[name])
         println("Got a generator for $name")
-        vec = Vector{eltype(col_gen)}(undef, column_length(columns[name]))
+        vec = Vector{el_type(columns[name])}(undef, column_length(columns[name]))
         for (j, val) in enumerate(col_gen)
             vec[j] = val
         end

@@ -48,7 +48,7 @@ end
 
     @test fieldsequal(ND.normalize(test_body), expected_table)
     
-        
+    @test eltype(ND.normalize(test_body).d) == Int64
 
 
 #     simple_columns_defs = [
