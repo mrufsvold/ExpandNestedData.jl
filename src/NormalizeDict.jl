@@ -1,53 +1,241 @@
 module NormalizeDict
+using StructTypes
+import Base.Iterators: repeated, flatten
 
-import Base.Iterators: repeated
-using Tables
+HasNameValuePairs = Union{StructTypes.DictType, StructTypes.DataType}
+"""Define a pairs iterator for all DataType structs"""
+get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
+get_pairs(::StructTypes.DataType, x) = ((p, getproperty(x, p)) for p in fieldnames(typeof(x)))
+get_pairs(x::Dict) = pairs(x)
 
-include("Helpers.jl")
-include("ConfiguredColumns.jl")
+"""Get the keys/names of any HasNameValuePairs object"""
+get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
+get_names(::StructTypes.DataType, x) = (n for n in fieldnames(typeof(x)))
+get_names(x::Dict) = keys(x)
 
 
-struct ColumnGenerator{T} <: AbstractArray{T,1}
-    generator
-    length::Int64
-    has_missing::Bool
+# Instructions are steps that need to be taken to construct a column
+abstract type AbstractInstruction end
+
+"""ColumnInstructions is a container for instructions that build columns"""
+Base.@kwdef mutable struct ColumnInstructions
+    steps::Channel{AbstractInstruction} = Channel{AbstractInstruction}(100)
+    column_length::Int64 = 0
 end
-Base.iterate(g::ColumnGenerator) = iterate(g.generator)
-Base.iterate(g::ColumnGenerator, state) = iterate(g.generator, state)
+column_length(c::ColumnInstructions) = c.column_length
+# Get the steps from the ColumnInstructions object
+steps(col::ColumnInstructions) = col.steps
 
+"""Fallback function for adding a new Instruction to a ColumnInstructions"""
+add_step!(c::ColumnInstructions, step::AbstractInstruction) = put!(c.steps, step)
+"""Seed is the original value that starts a columns generator"""
+struct Seed <: AbstractInstruction
+    value
+end
+add_step!(c::ColumnInstructions, s::Seed) = put!(steps(c), s)
+apply(::Nothing, step::Seed) = step.value
 
-function collect_column_generator(c::ColumnGenerator, total_length, vector_type::Type=Vector)
-    vec = vector_type{eltype(c)}(undef, total_length)
-    for (i, v) in zip(eachindex(vec), Iterators.cycle(c))
-        vec[i] = v
+"""Wrap all current values in an array so that it has only one "element" """
+struct Wrap <: AbstractInstruction end
+function add_step!(c::ColumnInstructions, step::Wrap)
+    put!(steps(c), step)
+    c.column_length = 1
+end
+apply(curr, ::Wrap) = [curr]
+
+# Repeat instructions repeat all of the values in the column in some way
+abstract type AbstractRepeatInstruction <: AbstractInstruction end
+function add_step!(col::ColumnInstructions, s::AbstractRepeatInstruction)
+    put!(steps(col), s)
+    col.column_length *= s.value
+end
+
+"""RepeatEach(N) will return an array where each source element appears N times in a row"""
+struct RepeatEach <: AbstractRepeatInstruction
+    value
+end
+apply(curr, step::RepeatEach) = curr .|> (v -> repeated(v, step.value)) |> flatten
+"""Cycle(N) cycles through an array N times"""
+struct Cycle <: AbstractRepeatInstruction
+    value
+end
+apply(curr, step::Cycle) = 1:step.value .|> (_ -> curr) |> flatten
+
+struct Insert <: AbstractInstruction
+    column
+end
+function add_step!(col::ColumnInstructions, s::Insert)
+    put!(steps(col), s)
+    col.column_length += column_length(s.column)
+end
+apply(curr, s::Insert) = flatten((curr , make_generator(s.column)))
+
+function stack(column1, columns2) 
+    add_step!(column1, Insert(columns2))
+    return column1
+end
+
+function init_column(data)
+    col = ColumnInstructions()
+    add_step!(col, Seed(data))
+    add_step!(col, Wrap())
+    return col
+end
+
+function missing_column(default, len)
+    col = ColumnInstructions()
+    add_step!(col, Seed(default))
+    add_step!(col, Wrap())
+    add_step!(col, Cycle(len))
+    return col
+end
+
+function make_generator(c::ColumnInstructions)
+    column_values = nothing 
+    while isready(c.steps)
+        step = take!(c.steps)
+        column_values = apply(column_values, step)
     end
-    return vec
+    return column_values
 end
 
+# Convenience alias for a dictionary of columns
+ColumnSet = Dict{Vector{Symbol}, ColumnInstructions}
+columnset(col) = ColumnSet(Symbol[] => col)
+init_column_set(data) = columnset(init_column(data))
+column_length(cols::ColumnSet) = cols |> values |> first |> column_length 
+# Add the same step to all columns in a ColumnSet
+add_step!(cols::ColumnSet, s) = cols |> values .|> (col -> add_step!(col, s))
+# Add a name to the front of all names in a set of columns
+prepend_name!(cols::ColumnSet, name) = cols |> keys .|> (k-> pushfirst!(k, name))
+# Check if all the columns in a set are of equal length
+all_equal_length(cols::ColumnSet) = cols |> values .|> column_length |> allequal
+"""
+get_column(cols::ColumnSet, name, default=missing)
 
-repeat_generator(values, repeat_count) = (v for value in values for v in repeated(value, repeat_count))
-function repeat_generator(values::ColumnGenerator, repeat_count)
-    return ColumnGenerator{eltype(values)}(
-        (v for value in values.generator for v in repeated(value, repeat_count)),
-        values.length * repeat_count,
-        values.has_missing
+Get a column from a set with a given name, if no column with that name is found
+# construct a new column with same length as column set
+"""
+get_column(cols::ColumnSet, name, default=missing) = name in keys(cols) ? cols[name] : missing_column(default, column_length(cols))
+
+
+"""
+column_set_product!(cols::ColumnSet)
+Repeat values of all columns such that the resulting columns have every product of
+the input columns. i.e.
+column_set_product!(
+    Dict(
+        [:a] => [1,2],
+        [:b] =? [3,4,5]
     )
-end
-
-
-# Make Leaf Nodes
-function make_path_graph(values::A, expand::Bool, left_siblings_product, has_missing=false, default = missing) where A <: AbstractArray
-    node = if expand
-        nonempty_array = length(values) == 0 ? repeated(default, 1) : values
-        ColumnGenerator{eltype(nonempty_array)}(repeat_generator(nonempty_array, left_siblings_product), length(nonempty_array), has_missing)
-    else
-        ColumnGenerator{eltype(values)}(repeated(values, left_siblings_product), 1, has_missing)
+)
+returns
+Dict(
+    [:a] => [1,1,1,2,2,2],
+    [:b] =? [3,4,5,3,4,5]
+)
+"""
+function column_set_product!(cols::ColumnSet)
+    multiplier = 1
+    for child_column in values(cols)
+        add_step!(child_column, RepeatEach(multiplier))
+        multiplier *= column_length(child_column)
     end
-    return node
+    cycle_columns_to_length!(cols)
 end
-function make_path_graph(value, ::Bool, left_siblings_product, has_missing=false, _ = missing)
-    return  ColumnGenerator{typeof(value)}(repeated(value, left_siblings_product), 1, has_missing)
+
+"""
+cycle_columns_to_length!(cols::ColumnSet) 
+
+Given a column set where the length of all columns is some factor of the length of the longest
+column, cycle all the short columns to match the length of the longest
+"""
+function cycle_columns_to_length!(cols::ColumnSet)
+    longest = cols |> values .|> column_length |> maximum
+    for child_column in values(cols)
+        catchup_mult = Int(longest / column_length(child_column))
+        add_step!(child_column, Cycle(catchup_mult))
+    end
 end
 
 
-end # module NormalizeDict
+process_node(data::T) where T = process_node(StructTypes.StructType(T), data)
+"""
+process_node(data::Any)
+
+This is the base case for processing nodes. It creates a new column, seeds with `data`
+and returns.
+"""
+function process_node(::Any, data)
+    return init_column_set(data)
+end
+
+
+"""
+process_node(data::HasNameValuePairs)
+
+For nodes that contain name-value pairs, process each value 
+"""
+function process_node(::D, data) where D <: HasNameValuePairs
+    columns = ColumnSet()
+    multiplier = 1
+    for (child_name, child_data) in pairs(data)
+        # Collect columns from the child's data
+        child_columns = process_node(child_data)
+        # Add the child's name to the key of all columns
+        prepend_name!(child_columns, child_name)
+        # Need to repeat each value for all of the values of the previous children
+        # to make a product of values
+        add_step!(child_columns, RepeatEach(multiplier))
+        merge!(columns, child_columns)
+    end
+    # catch up short columns with the total length for this group
+    cycle_columns_to_length!(columns)
+    return columns
+end
+
+
+
+
+function process_node(::A, data) where A <: StructTypes.ArrayType
+    if length(data) == 0
+        return columnset(missing_column(missing, 1))
+    end
+    if length(data) == 1
+        return process_node(data)
+    end
+
+    all_column_sets = process_node.(data)
+
+    unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
+
+    column_set = ColumnSet()
+    for name in unique_names
+        column_set[name] = all_column_sets         .|>
+            (col_set -> get_column(col_set, name))  |>
+            (cols -> foldl(stack, cols))
+    end
+    return column_set
+end
+
+
+function normalize(data)
+    columns = process_node(data)
+    names = keys(columns)
+    column_vecs = Vector{Vector}(undef, length(columns))
+    for (i, name) in enumerate(names)
+        col_gen = make_generator(columns[name])
+        println("Got a generator for $name")
+        vec = Vector{eltype(col_gen)}(undef, column_length(columns[name]))
+        for (j, val) in enumerate(col_gen)
+            vec[j] = val
+        end
+        println("Populated column $name")
+        column_vecs[i] = vec
+    end
+    return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
+end
+
+join_names(names) = names .|> string |> (s -> join(s, "_")) |> Symbol
+
+end
