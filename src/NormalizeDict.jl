@@ -2,13 +2,18 @@ module NormalizeDict
 using StructTypes
 import Base.Iterators: repeated, flatten
 
-HasNameValuePairs = Union{StructTypes.DictType, StructTypes.DataType}
+NameValuePairsObject = Union{StructTypes.DictType, StructTypes.DataType}
+is_NameValuePairsObject(t) = typeof(StructTypes.StructType(t)) <: NameValuePairsObject
+
+"""Check if any elements in an iterator are subtypes of NameValuePairsObject"""
+any_name_value_pair_els(itr) = els .|> StructTypes.StructType .|> (st -> st <: NameValuePairsObject) |> any
+
 """Define a pairs iterator for all DataType structs"""
 get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
 get_pairs(::StructTypes.DataType, x) = ((p, getproperty(x, p)) for p in fieldnames(typeof(x)))
 get_pairs(x::Dict) = pairs(x)
 
-"""Get the keys/names of any HasNameValuePairs object"""
+"""Get the keys/names of any NameValuePairsObject object"""
 get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
 get_names(::StructTypes.DataType, x) = (n for n in fieldnames(typeof(x)))
 get_names(x::Dict) = keys(x)
@@ -164,29 +169,52 @@ function cycle_columns_to_length!(cols::ColumnSet)
 end
 
 
-process_node(data::T) where T = process_node(StructTypes.StructType(T), data)
+process_node(data::T; kwargs...) where T = process_node(StructTypes.StructType(T), data; kwargs...)
+
+# If we get an array type, check if it should be expanded further or if it should be the seed of a new column
+function process_node(data::AbstractArray{T}; kwargs...) where {T}
+    # In the following cases, keep decending the tree
+    continue_processing = (
+        # If expand_arrays is true
+        kwargs[:expand_arrays] ||
+        # Empty array doesn't need further expansion
+        length(data) == 0 ||
+        # If all of the elements are name-value pair objects
+        is_NameValuePairsObject(T) ||
+        # Or if the elements are a union of types and any of them are name-value pair objects
+        (T <: Union && any_name_value_pair_els(Base.uniontypes(T) )) || 
+        # or if the elements are Any, we just need to check each one for name-value pair necessary
+        (T == Any && any_name_value_pair_els(data))
+    )
+    if continue_processing
+        return process_node(StructTypes.ArrayType(), data; kwargs...)
+    end
+
+    return process_node(nothing, data; kwargs...)
+end
+
 """
 process_node(data::Any)
 
 This is the base case for processing nodes. It creates a new column, seeds with `data`
 and returns.
 """
-function process_node(::Any, data)
+function process_node(::Any, data; kwargs...)
     return init_column_set(data)
 end
 
 
 """
-process_node(data::HasNameValuePairs)
+process_node(data::NameValuePairsObject)
 
 For nodes that contain name-value pairs, process each value 
 """
-function process_node(::D, data) where D <: HasNameValuePairs
+function process_node(::D, data; kwargs...) where D <: NameValuePairsObject
     columns = ColumnSet()
     multiplier = 1
     for (child_name, child_data) in pairs(data)
         # Collect columns from the child's data
-        child_columns = process_node(child_data)
+        child_columns = process_node(child_data; kwargs...)
         # Add the child's name to the key of all columns
         prepend_name!(child_columns, child_name)
         # Need to repeat each value for all of the values of the previous children
@@ -202,15 +230,15 @@ end
 
 
 
-function process_node(::A, data) where A <: StructTypes.ArrayType
+function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
     if length(data) == 0
         return columnset(missing_column(missing, 1))
     end
     if length(data) == 1
-        return process_node(data)
+        return process_node(data; kwargs...)
     end
 
-    all_column_sets = process_node.(data)
+    all_column_sets = process_node.(data; kwargs...)
 
     unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
 
@@ -224,18 +252,16 @@ function process_node(::A, data) where A <: StructTypes.ArrayType
 end
 
 
-function normalize(data)
-    columns = process_node(data)
+function normalize(data; expand_arrays::Bool = false)
+    columns = process_node(data; expand_arrays=expand_arrays)
     names = keys(columns)
     column_vecs = Vector{Vector}(undef, length(columns))
     for (i, name) in enumerate(names)
         col_gen = make_generator(columns[name])
-        println("Got a generator for $name")
         vec = Vector{el_type(columns[name])}(undef, column_length(columns[name]))
         for (j, val) in enumerate(col_gen)
             vec[j] = val
         end
-        println("Populated column $name")
         column_vecs[i] = vec
     end
     return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)

@@ -7,7 +7,7 @@ const ND = NormalizeDict
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
 fieldequal(::Missing, ::Missing) = true
-fieldequal(a1::AbstractArray, a2::AbstractArray) = fieldequal.(a1,a2) |> all
+fieldequal(a1::AbstractArray, a2::AbstractArray) = length(a1) == length(a2) && fieldequal.(a1,a2) |> all
 function fieldsequal(o1, o2)
     for name in fieldnames(typeof(o1))
         prop1 = getproperty(o1, name)
@@ -20,7 +20,7 @@ function fieldsequal(o1, o2)
     return true
 end
 
-@testset "NormalizeJSON" begin
+@testset "Normalize Dict" begin
     simple_test_body = JSON3.read("""
     {"data" : [
         {"E" : 7, "D" : 1},
@@ -41,14 +41,25 @@ end
         "d" : 4
     }
     """)
-    expected_table = (
-        a_b=[1,2,3,4,missing], 
-        a_c=[2, missing,1,1, missing], 
-        d=[4,4,4,4,4])
-
-    @test fieldsequal(ND.normalize(test_body), expected_table)
     
+    @test begin
+        expected_table = (
+            a_b=[1,2,3,4,missing], 
+            a_c=[2,missing,1,1, missing], 
+            d=[4,4,4,4,4])
+        fieldsequal(ND.normalize(test_body; expand_arrays=true), expected_table)
+    end
     @test eltype(ND.normalize(test_body).d) == Int64
+    @test begin
+        expected_table = (
+            a_b=[1,2,[3,4],missing], 
+            a_c=[2, missing,1, missing], 
+            d=[4,4,4,4])
+        fieldsequal(ND.normalize(test_body; expand_arrays=false), expected_table)
+    end
+    
+    
+    
 
 
 #     simple_columns_defs = [
