@@ -2,7 +2,7 @@ using Test, JSON3
 using NormalizeDict
 using StructTypes
 
-const ND = NormalizeDict
+ND = NormalizeDict
 
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
@@ -30,7 +30,7 @@ end
     expected_simple_table = (data_E=[7,8], data_D=[1,2])
     @test ND.normalize(simple_test_body) == expected_simple_table
 
-    test_body = JSON3.read("""
+    test_body_str = """
     {
         "a" : [
             {"b" : 1, "c" : 2},
@@ -40,16 +40,19 @@ end
         ],
         "d" : 4
     }
-    """)
+    """
+    test_body = JSON3.read(test_body_str)
     
+    
+    actual_expanded_table = ND.normalize(test_body; expand_arrays=true)
     @test begin
-        expected_table = (
+        expected_table_expanded = (
             a_b=[1,2,3,4,missing], 
             a_c=[2,missing,1,1, missing], 
             d=[4,4,4,4,4])
-        fieldsequal(ND.normalize(test_body; expand_arrays=true), expected_table)
+        fieldsequal(actual_expanded_table, expected_table_expanded)
     end
-    @test eltype(ND.normalize(test_body).d) == Int64
+    @test eltype(actual_expanded_table.d) == Int64
     @test begin
         expected_table = (
             a_b=[1,2,[3,4],missing], 
@@ -57,10 +60,23 @@ end
             d=[4,4,4,4])
         fieldsequal(ND.normalize(test_body; expand_arrays=false), expected_table)
     end
-    
-    
-    
 
+    struct InternalObj
+        b
+        c
+    end
+    struct MainBody
+        a::Vector{InternalObj}
+        d
+    end
+    struct_body = JSON3.read(test_body_str, MainBody)
+    @test begin
+        expected_table_expanded = (
+            a_b=[1,2,3,4,nothing], 
+            a_c=[2,nothing,1,1, nothing], 
+            d=[4,4,4,4,4])
+        fieldsequal(ND.normalize(struct_body; expand_arrays=true, missing_value=nothing), expected_table_expanded)
+    end
 
 #     simple_columns_defs = [
 #         NormalizeDict.ColumnDefinition([:data, :E]),
