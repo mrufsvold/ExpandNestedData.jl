@@ -1,4 +1,5 @@
 module NormalizeDict
+using PooledArrays
 using StructTypes
 using Logging
 import Base.Iterators: repeated, flatten
@@ -27,19 +28,17 @@ abstract type AbstractInstruction end
 mutable struct NestedIterator{T} <: AbstractArray{T, 1}
     get_index::Function
     column_length::Int64
+    unique_element_count::Int64
     #todo add an "element number" field to store the number of unique values
 end
 Base.length(ni::NestedIterator) = ni.column_length
+Base.size(ni::NestedIterator) = (ni.column_length,)
 Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
+Base.eachindex(ni::NestedIterator) = 1:length(ni)
 
 
-function Base.collect(x::NestedIterator)
-    v = Vector{eltype(x)}(undef, length(x))
-    for i in eachindex(v)
-        v[i] = x[i]
-    end
-    return v
-end
+Base.collect(x::NestedIterator, use_pool) = use_pool && x.unique_element_count > 0 ? PooledArray(x) : Vector(x)
+
 # Get the steps from the NestedIterator object
 update_length!(col::NestedIterator, i::Int) = (col.column_length = i)
 
@@ -64,8 +63,17 @@ unstack(i, c1_len, f1, f2) = i > c1_len ? f2(i-c1_len) : f1(i)
 function stack(c1::NestedIterator, c2::NestedIterator)
     type = Union{eltype(c1), eltype(c2)}
     len = (c1,c2) .|> length |> sum
+
+    bigger_el_count = max(c1.unique_element_count, c2.unique_element_count)
+
+    total_unique_elements = if bigger_el_count < 100 || bigger_el_count < len*0.1
+        new_el_count = sum(skipmissing(!(el in c1) for el in c2);init=0)
+        c1.unique_element_count + new_el_count
+    else
+        0
+    end
     f = (i) -> unstack(i, length(c1), c1.get_index, c2.get_index)
-    return NestedIterator{type}(f,len)
+    return NestedIterator{type}(f, len, total_unique_elements)
 end
 
 function init_column(data, expand_arrays=true)
@@ -73,7 +81,7 @@ function init_column(data, expand_arrays=true)
     len = length(value)
     type = eltype(value)
     f = (i::Int64) -> value[i]
-    return NestedIterator{type}(f, len)
+    return NestedIterator{type}(f, len, len)
 end
 
 function missing_column(default, len)
@@ -194,6 +202,7 @@ function process_node(::D, data; kwargs...) where D <: NameValuePairsObject
         # Need to repeat each value for all of the values of the previous children
         # to make a product of values
         repeat_each!.(values(child_columns), multiplier)
+        multiplier *= column_length(child_columns)
         merge!(columns, child_columns)
     end
     # catch up short columns with the total length for this group
@@ -226,12 +235,12 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
 end
 
 
-function normalize(data; expand_arrays::Bool = false, missing_value = missing)
+function normalize(data; expand_arrays::Bool = false, missing_value = missing, use_pool = false)
     @info "normalizing data"
     columns = process_node(data; expand_arrays=expand_arrays, missing_value=missing_value)
     @info "Retrieved $(length(columns)) columns from the data. They are $(column_length(columns)) elements long"
     names = keys(columns)
-    column_vecs = names .|> (n -> columns[n]) .|> collect
+    column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, use_pool))
     @info "returning table"
     return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
 end

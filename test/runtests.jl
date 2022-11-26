@@ -1,6 +1,7 @@
 using Test, JSON3
 using NormalizeDict
 using StructTypes
+using PooledArrays
 
 ND = NormalizeDict
 
@@ -77,6 +78,7 @@ end
             d=[4,4,4,4,4])
         fieldsequal(ND.normalize(struct_body; expand_arrays=true, missing_value=nothing), expected_table_expanded)
     end
+    @test typeof(ND.normalize(struct_body; use_pool=true)) == typeof(PooledArray([4,4,4,4,4]))
 
 #     simple_columns_defs = [
 #         NormalizeDict.ColumnDefinition([:data, :E]),
