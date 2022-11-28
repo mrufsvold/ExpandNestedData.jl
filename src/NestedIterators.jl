@@ -1,12 +1,8 @@
-# Instructions are steps that need to be taken to construct a column
-abstract type AbstractInstruction end
-
 """NestedIterator is a container for instructions that build columns"""
 mutable struct NestedIterator{T} <: AbstractArray{T, 1}
     get_index::Function
     column_length::Int64
     unique_values::Set{T}
-    #todo add an "element number" field to store the number of unique values
 end
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
@@ -16,8 +12,6 @@ Base.eachindex(ni::NestedIterator) = 1:length(ni)
 
 Base.collect(x::NestedIterator, use_pool) = use_pool && !(x.unique_values isa Nothing) ? PooledArray(x) : Vector(x)
 
-# Get the steps from the NestedIterator object
-update_length!(col::NestedIterator, i::Int) = (col.column_length = i)
 
 """repeat_each!(c, N) will return an array where each source element appears N times in a row"""
 function repeat_each!(c::NestedIterator, n)
@@ -27,6 +21,7 @@ function repeat_each!(c::NestedIterator, n)
     c.column_length *= n
 end
 unrepeat_each(i, n) = ceil(Int64, i/n)
+
 
 """cycle!(c, n) cycles through an array N times"""
 function cycle!(c::NestedIterator, n)
@@ -38,7 +33,9 @@ function cycle!(c::NestedIterator, n)
 end
 uncycle(i,n) = mod((i-1),n) + 1
 
-unstack(i::Int64, c1_len::Int64, f1::Function, f2::Function) = i > c1_len ? f2(i-c1_len) : f1(i)
+"""stack(c1::NestedIterator, c2::NestedIterator)
+Return a single NestedIterator which is the result of vcat(c1,c2)
+"""
 function stack(c1::NestedIterator, c2::NestedIterator)
     type = Union{eltype(c1), eltype(c2)}
     len = (c1,c2) .|> length |> sum
@@ -53,17 +50,31 @@ function stack(c1::NestedIterator, c2::NestedIterator)
     
     return NestedIterator{type}(f, len, values)
 end
+unstack(i::Int64, c1_len::Int64, f1::Function, f2::Function) = i > c1_len ? f2(i-c1_len) : f1(i)
 
-function init_column(data, expand_arrays=true)
+
+"""
+NestedIterator(data, expand_arrays=true)
+Construct a new NestedIterator seeded with the value data
+# Args
+data::Any: seed value
+expand_arrays::Bool: if data is an array, expand_arrays==false will treat the array as a single value when 
+    cycling the columns values
+"""
+function NestedIterator(data; expand_arrays=false, total_length=nothing)
     value = (expand_arrays && typeof(data) <: AbstractArray) ? data : [data]
     len = length(value)
     type = eltype(value)
     f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
-    return NestedIterator{type}(f, len, Set(value))
+    ni = NestedIterator{type}(f, len, Set(value))
+    if !(total_length isa Nothing)
+        cycle!(ni, total_length)
+    end
+    return ni
 end
 
-function missing_column(default, len)
-    col = init_column(default)
+function missing_column(default, len=1)
+    col = NestedIterator(default)
     cycle!(col, len)
     return col
 end
