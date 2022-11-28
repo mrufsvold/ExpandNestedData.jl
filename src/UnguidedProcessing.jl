@@ -1,10 +1,7 @@
 function normalize(data; expand_arrays::Bool = false, missing_value = missing, use_pool = false)
-    @info "normalizing data"
     columns = process_node(data; expand_arrays=expand_arrays, missing_value=missing_value)
-    @info "Retrieved $(length(columns)) columns from the data. They are $(column_length(columns)) elements long"
     names = keys(columns)
     column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, use_pool))
-    @info "returning table"
     return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
 end
 

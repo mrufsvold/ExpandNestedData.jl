@@ -3,14 +3,14 @@ join_names(names) = names .|> string |> (s -> join(s, "_")) |> Symbol
 
 
 # Convenience alias for a dictionary of columns
-ColumnSet = Dict{Union{Symbol,Vector{Symbol}}, NestedIterator}
+ColumnSet = Dict{N where N <: Union{Symbol,Vector{Symbol}}, NestedIterator{T} where T <: Any} 
 columnset(col) = ColumnSet(Symbol[] => col)
 init_column_set(data, expand_arrays=true) = columnset(NestedIterator(data; expand_arrays))
-column_length(cols::ColumnSet) = cols |> values |> first |> length 
+column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
-prepend_name!(cols::ColumnSet, name) = cols |> keys .|> (k-> pushfirst!(k, name))
+prepend_name!(cols, name) = cols |> keys .|> (k-> pushfirst!(k, name))
 # Check if all the columns in a set are of equal length
-all_equal_length(cols::ColumnSet) = cols |> values .|> length |> allequal
+all_equal_length(cols) = cols |> values .|> length |> allequal
 
 """
 get_column(cols::ColumnSet, name, default=missing)

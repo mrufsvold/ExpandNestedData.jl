@@ -80,43 +80,17 @@ end
     end
     @test typeof(ND.normalize(struct_body; use_pool=true).d) == typeof(PooledArray([4,4,4,4,4]))
 
-
-    # TODO 
-    # Simple solution, keep a unique values in a field of NestedIterator
-    # and just check recursively for unique values at each stack point
-
-    #complex solution
-    # Send down a comms channel and an ID generator
-    # At the init_column, k
-#     simple_columns_defs = [
-#         NormalizeDict.ColumnDefinition([:data, :E]),
-#         NormalizeDict.ColumnDefinition([:data, :D])]
-
-#     expected_simple_table = (data_E=[7,8] , data_D=[1,2])
     
-#     @test isequal(NormalizeDict.normalize(simple_test_body, simple_columns_defs), expected_simple_table)
-
-#     test_body = JSON3.read("""
-#     {
-#         "a" : [
-#             {"b" : 1, "c" : 2},
-#             {"b" : 2},
-#             {"b" : [3, 4], "c" : 1},
-#             {"b" : []}
-#         ],
-#         "d" : 4
-#     }
-#     """)
-#     columns_defs = [
-#         NormalizeDict.ColumnDefinition([:d]),
-#         NormalizeDict.ColumnDefinition([:a, :b]; expand_array=true),
-#         NormalizeDict.ColumnDefinition([:a, :c]),
-#         NormalizeDict.ColumnDefinition([:e, :f]; value_if_missing="Missing branch")
-#         ]
-#     expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
-#         e_f = repeat(["Missing branch"], 5)
-#     )
-#     @test isequal(NormalizeDict.normalize(test_body, columns_defs), expected_table)
+    columns_defs = [
+        NormalizeDict.ColumnDefinition([:d]),
+        NormalizeDict.ColumnDefinition([:a, :b]; expand_arrays=true),
+        NormalizeDict.ColumnDefinition([:a, :c]),
+        NormalizeDict.ColumnDefinition([:e, :f]; default_value="Missing branch")
+        ]
+    expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
+        e_f = repeat(["Missing branch"], 5)
+    )
+    @test isequal(NormalizeDict.normalize(test_body, columns_defs), expected_table)
 
 #     simple_array_body = JSON3.read("""
 #     [{"data" : [
