@@ -61,8 +61,13 @@ data::Any: seed value
 expand_arrays::Bool: if data is an array, expand_arrays==false will treat the array as a single value when 
     cycling the columns values
 """
-function NestedIterator(data; expand_arrays=false, total_length=nothing)
-    value = (expand_arrays && typeof(data) <: AbstractArray) ? data : [data]
+function NestedIterator(data; expand_arrays=false, total_length=nothing, default_value=missing)
+    value = if expand_arrays && typeof(data) <: AbstractArray
+        length(data) > 1 ? data : [default_value]
+    else
+        [data]
+    end
+
     len = length(value)
     type = eltype(value)
     f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
@@ -72,6 +77,7 @@ function NestedIterator(data; expand_arrays=false, total_length=nothing)
     end
     return ni
 end
+
 
 function missing_column(default, len=1)
     col = NestedIterator(default)

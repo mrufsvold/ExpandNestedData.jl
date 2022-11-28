@@ -5,20 +5,7 @@ function normalize(data; expand_arrays::Bool = false, missing_value = missing, u
     return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
 end
 
-"""
-process_node(data; kwargs...)
-Recursively process a nested data structure. Return a Dict{Vector{Symbol}, NestedIterator}
-where each Pair is a column that represents all values for a given set of keys/fieldnames.
 
-Args:
-data::Union{StructTypes.DictType, StructTypes.DataType}: A nested data structure
-Kwargs:
-expand_arrays::Bool: when a leaf node's values is an array, should it be flattened or left as a single value
-missing_value::Bool: Default value if a certain key/fieldname path is missing along some legs of the data
-
-Returns
-Dict{Vector{Symbol}, NestedIterator}: All unique key/fieldname paths and an iterator of values for each path
-"""
 # Dispatch processing of an object to the correct version of process node using StructType
 process_node(data::T; kwargs...) where T = process_node(StructTypes.StructType(T), data; kwargs...)
 

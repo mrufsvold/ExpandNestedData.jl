@@ -43,7 +43,7 @@ function make_column_def_child_copies(column_defs::ColumnDefs, name)
     return filter((def -> is_current_name(def, name)), column_defs) .|>
         (def -> ColumnDefinition(
             field_path(def),
-            path_index(def),
+            path_index(def) + 1,
             column_name(def),
             expand_arrays(def),
             default_value(def),
@@ -86,7 +86,8 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
             else
                 # If there are no children, there is only one column definition
                 col_def = first(child_col_defs)
-                new_column = NestedIterator(child_data; expand_arrays = expand_arrays(col_def))
+                new_column = NestedIterator(child_data; 
+                    expand_arrays = expand_arrays(col_def), default_value=default_value(col_def))
                 Dict(column_name(col_def) => new_column)
             end
         else
@@ -106,7 +107,7 @@ end
 function process_node(::A, data, col_defs::ColumnDefs) where A <: StructTypes.ArrayType
     # TODO Assert that all elements have name values pairs. 
     if length(data) == 0
-        return make_missing_column_set(child_col_defs) 
+        return make_missing_column_set(column_defs) 
     elseif length(data) == 1
         return process_node(first(data), column_defs)
     end

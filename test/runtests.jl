@@ -92,19 +92,5 @@ end
     )
     @test isequal(NormalizeDict.normalize(test_body, columns_defs), expected_table)
 
-#     simple_array_body = JSON3.read("""
-#     [{"data" : [
-#         {"E" : 7, "D" : 1},
-#         {"E" : 8, "D" : 2}
-#     ]},
-#     {"data" : [
-#         {"E" : 7, "D" : 1},
-#         {"E" : 8, "D" : 2}
-#     ]}
-#     ]
-#     """)
-#     expected_simple_array_table = (data_E=[7,8,7,8] , data_D=[1,2,1,2])
-#     @test isequal(NormalizeDict.normalize(simple_array_body, simple_columns_defs), expected_simple_array_table)
-#     @test isequal(NormalizeDict.normalize(simple_array_body), expected_simple_array_table)
 
 end
