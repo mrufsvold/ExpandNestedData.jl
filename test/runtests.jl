@@ -29,7 +29,7 @@ end
     ]}""")
 
     expected_simple_table = (data_E=[7,8], data_D=[1,2])
-    @test ND.normalize(simple_test_body) == expected_simple_table
+    @test fieldsequal(ND.normalize(simple_test_body), expected_simple_table)
 
     test_body_str = """
     {
@@ -91,5 +91,5 @@ end
     expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
         e_f = repeat(["Missing branch"], 5)
     )
-    @test isequal(ND.normalize(test_body, columns_defs), expected_table)
+    @test fieldsequal(ND.normalize(test_body, columns_defs), expected_table)
 end
