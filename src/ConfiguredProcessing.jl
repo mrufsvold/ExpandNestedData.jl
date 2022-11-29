@@ -3,23 +3,23 @@ struct ColumnDefinition
     field_path
     path_index::Int64
     column_name::Symbol
-    expand_arrays::Bool
+    flatten_arrays::Bool
     default_value
-    use_pool::Bool
+    pool_arrays::Bool
 end
 # Convenience alias
 ColumnDefs = Vector{ColumnDefinition}
-function ColumnDefinition(field_path; column_name=nothing, expand_arrays=false, default_value=missing, use_pool=false)
+function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
     column_name = column_name isa Nothing ? join_names(field_path) : column_name
-    ColumnDefinition(field_path, 1, column_name, expand_arrays, default_value, use_pool)
+    ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
 end
 
 # Accessors
 field_path(c::ColumnDefinition) = c.field_path
 column_name(c::ColumnDefinition) = c.column_name
 default_value(c::ColumnDefinition) = c.default_value
-use_pool(c::ColumnDefinition) = c.use_pool
-expand_arrays(c::ColumnDefinition) = c.expand_arrays
+pool_arrays(c::ColumnDefinition) = c.pool_arrays
+flatten_arrays(c::ColumnDefinition) = c.flatten_arrays
 path_index(c::ColumnDefinition) = c.path_index
 function current_path_name(c::ColumnDefinition)
     fp = field_path(c)
@@ -45,19 +45,19 @@ function make_column_def_child_copies(column_defs::ColumnDefs, name)
             field_path(def),
             path_index(def) + 1,
             column_name(def),
-            expand_arrays(def),
+            flatten_arrays(def),
             default_value(def),
-            use_pool(def)
+            pool_arrays(def)
         ))
 end
 
 function normalize(data, column_defs::ColumnDefs)
     columns = process_node(data, column_defs)
     names = column_name.(column_defs)
-    use_pools = use_pool.(column_defs)
+    pool_arrays = pool_arrays.(column_defs)
     column_vecs = [
         collect(columns[name], use_p)
-        for (name, use_p) in zip(names, use_pools)
+        for (name, use_p) in zip(names, pool_arrays)
     ]
     return NamedTuple{Tuple(names)}(column_vecs)
 end
@@ -87,7 +87,7 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
                 # If there are no children, there is only one column definition
                 col_def = first(child_col_defs)
                 new_column = NestedIterator(child_data; 
-                    expand_arrays = expand_arrays(col_def), default_value=default_value(col_def))
+                    flatten_arrays = flatten_arrays(col_def), default_value=default_value(col_def))
                 Dict(column_name(col_def) => new_column)
             end
         else

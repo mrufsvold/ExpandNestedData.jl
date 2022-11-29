@@ -5,7 +5,7 @@ join_names(names) = names .|> string |> (s -> join(s, "_")) |> Symbol
 # Convenience alias for a dictionary of columns
 ColumnSet = Dict{N where N <: Union{Symbol,Vector{Symbol}}, NestedIterator{T} where T <: Any} 
 columnset(col) = ColumnSet(Symbol[] => col)
-init_column_set(data, expand_arrays=true) = columnset(NestedIterator(data; expand_arrays))
+init_column_set(data, flatten_arrays=true) = columnset(NestedIterator(data; flatten_arrays))
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
 prepend_name!(cols, name) = cols |> keys .|> (k-> pushfirst!(k, name))

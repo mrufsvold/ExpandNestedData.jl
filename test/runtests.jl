@@ -45,7 +45,7 @@ end
     test_body = JSON3.read(test_body_str)
     
     
-    actual_expanded_table = ND.normalize(test_body; expand_arrays=true)
+    actual_expanded_table = ND.normalize(test_body; flatten_arrays=true)
     @test begin
         expected_table_expanded = (
             a_b=[1,2,3,4,missing], 
@@ -59,7 +59,7 @@ end
             a_b=[1,2,[3,4],missing], 
             a_c=[2, missing,1, missing], 
             d=[4,4,4,4])
-        fieldsequal(ND.normalize(test_body; expand_arrays=false), expected_table)
+        fieldsequal(ND.normalize(test_body; flatten_arrays=false), expected_table)
     end
 
     struct InternalObj
@@ -76,14 +76,14 @@ end
             a_b=[1,2,3,4,nothing], 
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
-        fieldsequal(ND.normalize(struct_body; expand_arrays=true, missing_value=nothing), expected_table_expanded)
+        fieldsequal(ND.normalize(struct_body; flatten_arrays=true, default_value=nothing), expected_table_expanded)
     end
-    @test typeof(ND.normalize(struct_body; use_pool=true).d) == typeof(PooledArray([4,4,4,4,4]))
+    @test typeof(ND.normalize(struct_body; pool_arrays=true).d) == typeof(PooledArray([4,4,4,4,4]))
 
     
     columns_defs = [
         NormalizeDict.ColumnDefinition([:d]),
-        NormalizeDict.ColumnDefinition([:a, :b]; expand_arrays=true),
+        NormalizeDict.ColumnDefinition([:a, :b]; flatten_arrays=true),
         NormalizeDict.ColumnDefinition([:a, :c]),
         NormalizeDict.ColumnDefinition([:e, :f]; default_value="Missing branch")
         ]

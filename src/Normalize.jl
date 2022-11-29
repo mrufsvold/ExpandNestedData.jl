@@ -1,8 +1,10 @@
-module NormalizeDict
+module Normalize
 using PooledArrays
 using StructTypes
-using Logging
 import Base.Iterators: repeated, flatten
+
+export normalize
+export ColumnDefinition
 
 include("NameValueContainers.jl")
 include("NestedIterators.jl")

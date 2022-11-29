@@ -1,7 +1,7 @@
-function normalize(data; expand_arrays::Bool = false, missing_value = missing, use_pool = false)
-    columns = process_node(data; expand_arrays=expand_arrays, missing_value=missing_value)
+function normalize(data; flatten_arrays::Bool = false, default_value = missing, pool_arrays = false)
+    columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
     names = keys(columns)
-    column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, use_pool))
+    column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, pool_arrays))
     return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
 end
 
@@ -11,15 +11,15 @@ process_node(data::T; kwargs...) where T = process_node(StructTypes.StructType(T
 
 
 # Make a new column when you get to the bottom of the nested objects
-process_node(::Any, data; kwargs...) = init_column_set(data, kwargs[:expand_arrays])
+process_node(::Any, data; kwargs...) = init_column_set(data, kwargs[:flatten_arrays])
 
 
 # If we get an array type, check if it should be expanded further or if it should be the seed of a new column
 function process_node(data::AbstractArray{T}; kwargs...) where {T}
     # In the following cases, keep decending the tree
     continue_processing = (
-        # If expand_arrays is true
-        kwargs[:expand_arrays] ||
+        # If flatten_arrays is true
+        kwargs[:flatten_arrays] ||
         # Empty array doesn't need further expansion
         length(data) == 0 ||
         # If all of the elements are name-value pair objects
@@ -40,7 +40,7 @@ end
 # handle unpacking arraylike objects
 function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
     if length(data) == 0
-        return columnset(NestedIterator(kwargs[:missing_value]))
+        return columnset(NestedIterator(kwargs[:default_value]))
     elseif  length(data) == 1
         return process_node(first(data); kwargs...)
     end
@@ -52,7 +52,7 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
     column_set = ColumnSet()
     for name in unique_names
         column_set[name] = all_column_sets         .|>
-            (col_set -> get_column(col_set, name, kwargs[:missing_value]))  |>
+            (col_set -> get_column(col_set, name, kwargs[:default_value]))  |>
             (cols -> foldl(stack, cols))
     end
     return column_set

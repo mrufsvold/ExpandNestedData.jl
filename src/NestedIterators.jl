@@ -10,7 +10,7 @@ Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
 Base.eachindex(ni::NestedIterator) = 1:length(ni)
 
 
-Base.collect(x::NestedIterator, use_pool) = use_pool && !(x.unique_values isa Nothing) ? PooledArray(x) : Vector(x)
+Base.collect(x::NestedIterator, pool_arrays) = pool_arrays && !(x.unique_values isa Nothing) ? PooledArray(x) : Vector(x)
 
 
 """repeat_each!(c, N) will return an array where each source element appears N times in a row"""
@@ -54,15 +54,15 @@ unstack(i::Int64, c1_len::Int64, f1::Function, f2::Function) = i > c1_len ? f2(i
 
 
 """
-NestedIterator(data, expand_arrays=true)
+NestedIterator(data, flatten_arrays=true)
 Construct a new NestedIterator seeded with the value data
 # Args
 data::Any: seed value
-expand_arrays::Bool: if data is an array, expand_arrays==false will treat the array as a single value when 
+flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the array as a single value when 
     cycling the columns values
 """
-function NestedIterator(data; expand_arrays=false, total_length=nothing, default_value=missing)
-    value = if expand_arrays && typeof(data) <: AbstractArray
+function NestedIterator(data; flatten_arrays=false, total_length=nothing, default_value=missing)
+    value = if flatten_arrays && typeof(data) <: AbstractArray
         length(data) > 1 ? data : [default_value]
     else
         [data]
