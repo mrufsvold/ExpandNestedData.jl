@@ -2,7 +2,7 @@
 [![codecov](https://codecov.io/gh/mrufsvold/Normalize.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/Normalize.jl)
 ### Documenation
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://mrufsvold.github.io/Normalize.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-stable-blue.svg)](https://mrufsvold.github.io/Normalize.jl/dev)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/Normalize.jl/dev)
 
 
 #### TL;DR
