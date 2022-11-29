@@ -1,7 +1,7 @@
-using Test, JSON3
-using Normalize
-using StructTypes
 using PooledArrays
+using Test
+using JSON3
+using Normalize
 
 ND = Normalize
 
