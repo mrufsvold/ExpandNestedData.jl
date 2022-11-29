@@ -4,8 +4,8 @@ is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContain
 
 
 """Check if any elements in an iterator are subtypes of NameValueContainer"""
-has_namevaluecontainer_element(itr) = itr .|> StructTypes.StructType .|> (st -> st <: NameValueContainer) |> any
-
+has_namevaluecontainer_element(itr) = itr |> eltype |> get_member_types .|> is_NameValueContainer |> any
+get_member_types(T) = T isa Union ? Base.uniontypes(T) : [T]
 
 """Define a pairs iterator for all DataType structs"""
 get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
