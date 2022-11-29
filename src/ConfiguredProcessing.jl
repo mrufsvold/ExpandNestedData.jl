@@ -54,10 +54,10 @@ end
 function normalize(data, column_defs::ColumnDefs)
     columns = process_node(data, column_defs)
     names = column_name.(column_defs)
-    pool_arrays = pool_arrays.(column_defs)
+    use_pooled = pool_arrays.(column_defs)
     column_vecs = [
         collect(columns[name], use_p)
-        for (name, use_p) in zip(names, pool_arrays)
+        for (name, use_p) in zip(names, use_pooled)
     ]
     return NamedTuple{Tuple(names)}(column_vecs)
 end

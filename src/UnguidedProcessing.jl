@@ -1,8 +1,13 @@
-function normalize(data; flatten_arrays::Bool = false, default_value = missing, pool_arrays = false)
+function normalize(data; flatten_arrays::Bool = false, default_value = missing, 
+        pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}())
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
     names = keys(columns)
     column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, pool_arrays))
-    return NamedTuple{Tuple(join_names(n) for n in names)}(column_vecs)
+    
+    formatted_column_names = [
+        n in keys(column_names) ? column_names[n] :  join_names(n)
+        for n in names]
+    return NamedTuple{Tuple(formatted_column_names)}(column_vecs)
 end
 
 

@@ -4,6 +4,10 @@ dictionaries or structs of structs and produce a normalized, Tables.jl-compliant
 It can be used with JSON3.jl, XMLDict.jl, and other packages that parse file formats which are
 structured as denormalized data.
 
+```@contents
+Depth = 4
+```
+
 ## Getting Started
 ### Install
 ```@repl
@@ -36,27 +40,30 @@ normalize(message) |> DataFrame
 ### Kwarg Options
 | Parameter | Description |
 | --------- | ----------- |
-| `flatten_arrays::Bool` | When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`|
-| `default_value::Any` | When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing` |
-| `pool_arrays::Bool` | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
+| `flatten_arrays::Bool`                        | When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`|
+| `default_value::Any`                          | When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing` |
+| `pool_arrays::Bool`                           | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
+| `column_names::Dict{Vector{Symbol}, Symbol}`  | Provide a mapping of key/fieldname paths to replaced column names |
 
 ```@example
 using Normalize #hide
 using JSON3 #hide
 using DataFrames #hide
 
-message = JSON3.read(""" #hide
-    { #hide
-        "a" : [ #hide
-            {"b" : 1, "c" : 2}, #hide
-            {"b" : 2}, #hide
-            {"b" : [3, 4], "c" : 1}, #hide
-            {"b" : []} #hide
-        ], #hide
-        "d" : 4 #hide
-    } #hide
-    """ #hide
-) #hide
+message = JSON3.read(""" 
+    { 
+        "a" : [ 
+            {"b" : 1, "c" : 2}, 
+            {"b" : 2}, 
+            {"b" : [3, 4], "c" : 1}, 
+            {"b" : []} 
+        ], 
+        "d" : 4 
+    } 
+    """ 
+) 
 
-normalize(message; flatten_arrays=true, default_value=nothing, pool_arrays=true) |> DataFrame
+name_map = Dict([:a, :b] => :Column_B)
+
+normalize(message; flatten_arrays=true, default_value="no value", pool_arrays=true, column_names=name_map) |> DataFrame
 ```
