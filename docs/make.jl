@@ -3,7 +3,7 @@ using Documenter, Normalize
 makedocs(
     sitename="Normalize.jl",
     modules = Module[Normalize],
-    pages = ["Contents" => "index.md"]    
+    pages = ["Home" => "index.md"]    
 )
 
 deploydocs(
