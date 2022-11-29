@@ -1,7 +1,6 @@
 module Normalize
 using PooledArrays
 using StructTypes
-import Base.Iterators: repeated, flatten
 
 export normalize
 export ColumnDefinition
