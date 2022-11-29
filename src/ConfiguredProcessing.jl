@@ -9,6 +9,23 @@ struct ColumnDefinition
 end
 # Convenience alias
 ColumnDefs = Vector{ColumnDefinition}
+
+
+"""
+    ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
+
+## Args
+* `field_path`: Vector of keys/fieldnames that constitute a path from the top of the data to the values to extract for the column
+
+## Keyword Args
+* `column_name::Symbol`: A name for the resulting column. If `nothing`, defaults to joining the field_path with snake_case_format.
+* `flatten_arrays`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
+* `default_value`: When the field_path keys do not exist on one or more branches, fill with this value. Default: `missing`
+* `pool_arrays`: When collecting values for this column, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
+
+## Returns
+`::ColumnDefinition`
+"""
 function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
     column_name = column_name isa Nothing ? join_names(field_path) : column_name
     ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
@@ -51,7 +68,22 @@ function make_column_def_child_copies(column_defs::ColumnDefs, name)
         ))
 end
 
+
+"""
+    normalize(data, column_defs::Vector{ColumnDefinition})
+
+Take a nested data structure, `data` and convert it into a `Table` based on configurations passed
+for each column.
+
+## Args
+* `data`: Any nested data structure (struct of structs or Dict of Dicts) or an array of such data structures
+* `column_defs::Vector{ColumnDefinition}`: A ColumnDefinition for each column to be extracted from the `data`
+
+## Returns
+`::NamedTuple`: A Tables.jl compliant Tuple of Vectors
+"""
 function normalize(data, column_defs::ColumnDefs)
+    # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
     names = column_name.(column_defs)
     use_pooled = pool_arrays.(column_defs)

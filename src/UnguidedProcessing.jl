@@ -1,3 +1,20 @@
+"""
+    normalize(data; flatten_arrays = false, default_value = missing, pool_arrays = false, column_names=Dict{Vector{Symbol}, Symbol}())
+
+Take a nested data structure, `data` and convert it into a `Table`
+
+## Args
+* `data`: Any nested data structure (struct of structs or Dict of Dicts) or an array of such data structures
+
+## Keyword Args
+* `flatten_arrays`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
+* `default_value`: When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing`
+* `pool_arrays`: When collecting vectors for columns, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
+* `column_names::Dict{Vector{Symbol}, Symbol}`: Provide a mapping of key/fieldname paths to replaced column names
+
+## Returns
+`::NamedTuple`: A Tables.jl compliant Tuple of Vectors
+"""
 function normalize(data; flatten_arrays::Bool = false, default_value = missing, 
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}())
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
