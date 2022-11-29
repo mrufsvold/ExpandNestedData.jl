@@ -1,3 +1,5 @@
-/Manifest.toml
+*/Manifest.toml
 runner.jl
 archive
+build/*
+docs/build
