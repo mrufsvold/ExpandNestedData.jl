@@ -15,7 +15,8 @@ Base.collect(x::NestedIterator, pool_arrays) = pool_arrays && !(x.unique_values 
 
 """repeat_each!(c, N) will return an array where each source element appears N times in a row"""
 function repeat_each!(c::NestedIterator, n)
-    if length(c.unique_values) == 1
+    # when there is only one unique value, we can skip composing the unrepeat_each step
+    if length(c.unique_values) != 1
         c.get_index = c.get_index ∘ ((i) -> unrepeat_each(i, n))
     end
     c.column_length *= n
@@ -25,8 +26,9 @@ unrepeat_each(i, n) = ceil(Int64, i/n)
 
 """cycle!(c, n) cycles through an array N times"""
 function cycle!(c::NestedIterator, n)
-    l = length(c)
-    if length(c.unique_values) == 1
+    # when there is only one unique value, we can skip composing the uncycle step
+    if length(c.unique_values) != 1
+        l = length(c)
         c.get_index = c.get_index ∘ ((i::Int64) -> uncycle(i, l))
     end
     c.column_length *= n
