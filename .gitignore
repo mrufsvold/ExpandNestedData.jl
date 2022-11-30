@@ -3,3 +3,4 @@ runner.jl
 archive
 build/*
 docs/build
+Manifest

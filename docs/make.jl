@@ -1,4 +1,5 @@
-using Documenter, Normalize
+using Documenter
+using Normalize
 
 makedocs(
     sitename="Normalize.jl",
