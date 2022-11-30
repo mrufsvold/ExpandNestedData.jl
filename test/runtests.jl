@@ -56,7 +56,7 @@ end
     @test eltype(actual_expanded_table.d) == Int64
     @test begin
         expected_table = (
-            Column_B=[1,2,[3,4],missing], 
+            Column_B=[1,2,[3,4],[]], 
             a_c=[2, missing,1, missing], 
             d=[4,4,4,4])
         name_map = Dict([:a, :b] => :Column_B)

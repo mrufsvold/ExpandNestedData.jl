@@ -33,25 +33,16 @@ process_node(data::T; kwargs...) where T = process_node(StructTypes.StructType(T
 
 
 # Make a new column when you get to the bottom of the nested objects
-process_node(::Any, data; kwargs...) = init_column_set(data, kwargs[:flatten_arrays])
-
+function process_node(::Any, data; kwargs...)
+    value = data isa AbstractArray && length(data) == 0 && kwargs[:flatten_arrays] ?
+        kwargs[:default_value] :
+        data
+    init_column_set(value, kwargs[:flatten_arrays])
+end
 
 # If we get an array type, check if it should be expanded further or if it should be the seed of a new column
 function process_node(data::AbstractArray{T}; kwargs...) where {T}
-    # In the following cases, keep decending the tree
-    continue_processing = (
-        # If flatten_arrays is true
-        kwargs[:flatten_arrays] ||
-        # Empty array doesn't need further expansion
-        length(data) == 0 ||
-        # If all of the elements are name-value pair objects
-        is_NameValueContainer(T) ||
-        # Or if the elements are a union of types and any of them are name-value pair objects
-        (T <: Union && has_namevaluecontainer_element(Base.uniontypes(T) )) || 
-        # or if the elements are Any, we just need to check each one for name-value pair necessary
-        (T == Any && has_namevaluecontainer_element(data))
-    )
-    if continue_processing
+    if length(data) > 0 && (kwargs[:flatten_arrays] || has_namevaluecontainer_element(data))
         return process_node(StructTypes.ArrayType(), data; kwargs...)
     end
 
