@@ -25,28 +25,28 @@ end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
-function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_arrays::Bool)
+function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
     children_tuple = NamedTuple(
-        name(child) => make_column_tuple(columns, child, lazy_arrays::Bool)
+        name(child) => make_column_tuple(columns, child, lazy_columns::Bool)
         for child in children(path_graph)
     )
     return Table(children_tuple)
 end
-function make_column_tuple(columns, path_graph::ValueNode, lazy_arrays::Bool)
+function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
     lazy_column = columns[field_path(path_graph)]
-    return lazy_arrays ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
+    return lazy_columns ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
 end
 
 
 """Construct an ExpandedTable from the results of `expand`"""
-function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_arrays, pool_arrays)
+function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_columns, pool_arrays)
     paths = keys(columns)
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays)
-    return ExpandedTable(columns, col_defs, lazy_arrays)
+    return ExpandedTable(columns, col_defs, lazy_columns)
 end
-function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_arrays::Bool)
+function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns::Bool)
     path_graph = make_path_graph(column_defs)
-    column_tuple = make_column_tuple(columns, path_graph, lazy_arrays)
+    column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
         column_name(def) => field_path(def)
         for def in column_defs

@@ -15,12 +15,12 @@ Take a nested data structure, `data` and convert it into a `Table`
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function normalize(data; flatten_arrays::Bool = false, default_value = missing, lazy_arrays::Bool = true,
+function normalize(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = true,
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
     
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    expanded_table = ExpandedTable(columns, column_names, lazy_arrays, pool_arrays)
+    expanded_table = ExpandedTable(columns, column_names, lazy_columns, pool_arrays)
 
     if column_style == flat_columns
         return as_flat_table(expanded_table)
