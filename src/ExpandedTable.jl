@@ -39,19 +39,24 @@ end
 
 
 """Construct an ExpandedTable from the results of `expand`"""
-function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_columns, pool_arrays)
+function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_columns, pool_arrays, column_style)
     paths = keys(columns)
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays)
-    return ExpandedTable(columns, col_defs, lazy_columns)
+    return ExpandedTable(columns, col_defs, lazy_columns, column_style)
 end
-function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns::Bool)
+function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns::Bool, column_style)
     path_graph = make_path_graph(column_defs)
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
         column_name(def) => field_path(def)
         for def in column_defs
     )
-    return ExpandedTable(col_lookup, column_tuple)
+    expanded_table = ExpandedTable(col_lookup, column_tuple)
+    if column_style == flat_columns
+        return as_flat_table(expanded_table)
+    elseif column_style == nested_columns
+        return as_nested_table(expanded_table)
+    end
 end
 
 

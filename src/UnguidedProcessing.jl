@@ -18,15 +18,8 @@ Take a nested data structure, `data` and convert it into a `Table`
 function normalize(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = true,
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
-    
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    expanded_table = ExpandedTable(columns, column_names, lazy_columns, pool_arrays)
-
-    if column_style == flat_columns
-        return as_flat_table(expanded_table)
-    elseif column_style == nested_columns
-        return as_nested_table(expanded_table)
-    end
+    return ExpandedTable(columns, column_names, lazy_columns, pool_arrays, column_style)
 end
 
 

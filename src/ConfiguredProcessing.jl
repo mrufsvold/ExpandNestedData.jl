@@ -11,15 +11,10 @@ for each column.
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function normalize(data, column_defs::ColumnDefs)
+function normalize(data, column_defs::ColumnDefs; lazy_columns::Bool = true, column_style::ColumnStyle=flat_columns)
     # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
-    names = column_name.(column_defs)
-    column_vecs = [
-        collect(columns[field_path(def)], pool_arrays(def))
-        for def in column_defs
-    ]
-    return NamedTuple{Tuple(names)}(column_vecs)
+    return ExpandedTable(columns, column_defs, lazy_columns, column_style)
 end
 
 
