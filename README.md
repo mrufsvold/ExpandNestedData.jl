@@ -39,3 +39,9 @@ column_defs = [
 
 normalize(message, column_defs) |> DataFrame
 ```
+
+## Roadmap
+- [ ] Support for AbstractTree.jl input (This would enable composability with Gumbo.jl and others)
+- [ ] Return a custom Table that allows nested and flattened access to columns
+- [ ] Use custom Table as input for compressing tabular data to nested data
+

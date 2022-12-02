@@ -63,7 +63,7 @@ end
 function process_node(::A, data, col_defs::ColumnDefs) where A <: StructTypes.ArrayType
     # TODO Assert that all elements have name values pairs. 
     if length(data) == 0
-        return make_missing_column_set(column_defs) 
+        return make_missing_column_set(column_defs, (col_defs |> first |> path_index))
     elseif length(data) == 1
         return process_node(first(data), column_defs)
     end
