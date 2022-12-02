@@ -1,74 +1,3 @@
-
-struct ColumnDefinition
-    field_path
-    path_index::Int64
-    column_name::Symbol
-    flatten_arrays::Bool
-    default_value
-    pool_arrays::Bool
-end
-# Convenience alias
-ColumnDefs = Vector{ColumnDefinition}
-
-
-"""
-    ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
-
-## Args
-* `field_path`: Vector of keys/fieldnames that constitute a path from the top of the data to the values to extract for the column
-
-## Keyword Args
-* `column_name::Symbol`: A name for the resulting column. If `nothing`, defaults to joining the field_path with snake_case_format.
-* `flatten_arrays`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
-* `default_value`: When the field_path keys do not exist on one or more branches, fill with this value. Default: `missing`
-* `pool_arrays`: When collecting values for this column, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
-
-## Returns
-`::ColumnDefinition`
-"""
-function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
-    column_name = column_name isa Nothing ? join_names(field_path) : column_name
-    ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
-end
-
-# Accessors
-field_path(c::ColumnDefinition) = c.field_path
-column_name(c::ColumnDefinition) = c.column_name
-default_value(c::ColumnDefinition) = c.default_value
-pool_arrays(c::ColumnDefinition) = c.pool_arrays
-flatten_arrays(c::ColumnDefinition) = c.flatten_arrays
-path_index(c::ColumnDefinition) = c.path_index
-function current_path_name(c::ColumnDefinition)
-    fp = field_path(c)
-    i = path_index(c)
-    return fp[i]
-end
-
-
-is_current_name(col_def::ColumnDefinition, name) = current_path_name(col_def) == name
-
-has_more_keys(col_def) = path_index(col_def) < length(field_path(col_def))
-
-
-function analyze_column_defs(col_defs::ColumnDefs)
-    unique_names = col_defs .|> current_path_name |> unique
-    names_with_children = filter(has_more_keys, col_defs) .|> current_path_name |> unique
-    return (unique_names, names_with_children)
-end
-
-function make_column_def_child_copies(column_defs::ColumnDefs, name)
-    return filter((def -> is_current_name(def, name)), column_defs) .|>
-        (def -> ColumnDefinition(
-            field_path(def),
-            path_index(def) + 1,
-            column_name(def),
-            flatten_arrays(def),
-            default_value(def),
-            pool_arrays(def)
-        ))
-end
-
-
 """
     normalize(data, column_defs::Vector{ColumnDefinition})
 
@@ -157,13 +86,6 @@ function process_node(::A, data, col_defs::ColumnDefs) where A <: StructTypes.Ar
 end
 
 
-function make_missing_column_set(child_col_defs::ColumnDefs)
-    missing_column_set =  Dict(
-        column_name(def) => NestedIterator(default_value(def))
-        for def in child_col_defs
-    )
-    return missing_column_set
-end
 
 
 

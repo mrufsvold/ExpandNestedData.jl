@@ -21,7 +21,7 @@ function fieldsequal(o1, o2)
     return true
 end
 
-@testset "Normalize" begin
+@testset "Expand" begin
     simple_test_body = JSON3.read("""
     {"data" : [
         {"E" : 7, "D" : 1},

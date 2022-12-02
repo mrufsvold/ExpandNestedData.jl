@@ -6,7 +6,7 @@ Stable docs are broken right now.
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/Normalize.jl/dev)
 
 
-#### TL;DR
+#### Tl;Dr
 ```julia
 using Normalize 
 using JSON3
