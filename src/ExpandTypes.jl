@@ -161,9 +161,9 @@ function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false,
     column_name = column_name isa Nothing ? join_names(field_path) : column_name
     ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
 end
-function ColumnDefinition(field_path, column_names::Dict)
+function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool)
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
-    ColumnDefinition(field_path; column_name=column_name)
+    ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays)
 end
 # Accessors
 field_path(c::ColumnDefinition) = c.field_path
@@ -176,6 +176,10 @@ function current_path_name(c::ColumnDefinition)
     fp = field_path(c)
     i = path_index(c)
     return fp[i]
+end
+function path_to_children(c::ColumnDefinition, current_index)
+    fp = field_path(c)
+    return fp[current_index:end]
 end
 
 
@@ -207,8 +211,8 @@ end
 #####################
 
 # Convenience alias for a dictionary of columns
-ColumnSet = Dict{N where N <: Union{Symbol,Vector{Symbol}}, NestedIterator{T} where T <: Any} 
-columnset(col) = ColumnSet(Symbol[] => col)
+ColumnSet = Dict{Vector, NestedIterator{T} where T <: Any} 
+columnset(col) = ColumnSet([] => col)
 init_column_set(data, flatten_arrays=true) = columnset(NestedIterator(data; flatten_arrays))
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
@@ -266,10 +270,10 @@ function cycle_columns_to_length!(cols::ColumnSet)
 end
 
 """Return a missing column for each member of a ColumnDefs"""
-function make_missing_column_set(child_col_defs::ColumnDefs)
+function make_missing_column_set(col_defs::ColumnDefs, current_index)
     missing_column_set =  Dict(
-        column_name(def) => NestedIterator(default_value(def))
-        for def in child_col_defs
+        path_to_children(def, current_index) => NestedIterator(default_value(def))
+        for def in col_defs
     )
     return missing_column_set
 end
@@ -292,11 +296,14 @@ end
 
 struct ValueNode <: AbstractValueNode
     name
-    column_name
+    field_path
+    pool_arrays
 end
 
 children(n::AbstractPathNode) = n.children
 name(n::AbstractPathNode) = n.name
+field_path(n::AbstractValueNode) = n.field_path
+pool_arrays(n::AbstractValueNode) = n.pool_arrays
 
 function make_path_nodes(column_defs)
     unique_names = column_defs .|> current_path_name |> unique
@@ -307,12 +314,12 @@ function make_path_nodes(column_defs)
 
         if all(are_value_nodes)
             # If we got to a value node, there should only be one.
-            col = first(matching_defs)
-            nodes[i] = ValueNode(unique_name, column_name(col))
+            def = first(matching_defs)
+            nodes[i] = ValueNode(unique_name, field_path(def), pool_arrays(def))
             continue
         end
 
-        children_col_defs = matching_defs .|> make_column_def_child_copies
+        children_col_defs = make_column_def_child_copies(matching_defs, unique_name)
         if any(are_value_nodes)
             throw(ArgumentError("The path name $unique_name refers a value in one branch and to nested child(ren): $(field_path.(children_names))"))
         end
@@ -324,6 +331,5 @@ end
 
 """Create a graph of field_paths that models the structure of the nested data"""
 make_path_graph(col_defs::ColumnDefs) = TopLevelNode(make_path_nodes(col_defs))
-make_path_graph(paths, column_names::Dict = Dict()) = make_path_graph(ColumnDefinition.(paths, Ref(column_names)))
 
 

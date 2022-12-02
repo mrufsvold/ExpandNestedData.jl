@@ -15,10 +15,9 @@ function normalize(data, column_defs::ColumnDefs)
     # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
     names = column_name.(column_defs)
-    use_pooled = pool_arrays.(column_defs)
     column_vecs = [
-        collect(columns[name], use_p)
-        for (name, use_p) in zip(names, use_pooled)
+        collect(columns[field_path(def)], pool_arrays(def))
+        for def in column_defs
     ]
     return NamedTuple{Tuple(names)}(column_vecs)
 end
@@ -42,19 +41,20 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
         # name is in data and needs to be unpacked, is seed of a column, or name is missing 
         child_columns = if name in data_names
             child_data = get_value(data, name)
-            if name in names_with_children
+            child_columns = if name in names_with_children
                 process_node(child_data, child_col_defs)
             else
                 # If there are no children, there is only one column definition
                 col_def = first(child_col_defs)
                 new_column = NestedIterator(child_data; 
                     flatten_arrays = flatten_arrays(col_def), default_value=default_value(col_def))
-                Dict(column_name(col_def) => new_column)
+                Dict([] => new_column)
             end
+            prepend_name!(child_columns, name)
+            child_columns
         else
-            make_missing_column_set(child_col_defs)
+            make_missing_column_set(child_col_defs, path_index(first(col_defs)))
         end
-
         repeat_each!.(values(child_columns), multiplier)
         multiplier *= column_length(child_columns)
         merge!(columns, child_columns)
@@ -74,10 +74,9 @@ function process_node(::A, data, col_defs::ColumnDefs) where A <: StructTypes.Ar
     end
 
     all_column_sets = process_node.(data, Ref(col_defs))
-
+    unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
     column_set = ColumnSet()
-    for def in col_defs
-        name = column_name(def)
+    for name in unique_names
         column_set[name] = all_column_sets .|>
             (col_set -> col_set[name]) |>
             (cols -> foldl(stack, cols))

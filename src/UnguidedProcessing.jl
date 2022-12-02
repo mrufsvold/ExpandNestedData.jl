@@ -15,16 +15,18 @@ Take a nested data structure, `data` and convert it into a `Table`
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function normalize(data; flatten_arrays::Bool = false, default_value = missing, 
-        pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}())
-    columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    names = keys(columns)
-    column_vecs = names .|> (n -> columns[n]) .|> (c -> collect(c, pool_arrays))
+function normalize(data; flatten_arrays::Bool = false, default_value = missing, lazy_arrays::Bool = true,
+        pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
+        column_style::ColumnStyle=flat_columns)
     
-    formatted_column_names = [
-        n in keys(column_names) ? column_names[n] :  join_names(n)
-        for n in names]
-    return NamedTuple{Tuple(formatted_column_names)}(column_vecs)
+    columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
+    expanded_table = ExpandedTable(columns, column_names, lazy_arrays, pool_arrays)
+
+    if column_style == flat_columns
+        return as_flat_table(expanded_table)
+    elseif column_style == nested_columns
+        return as_nested_table(expanded_table)
+    end
 end
 
 

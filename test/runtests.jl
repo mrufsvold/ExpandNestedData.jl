@@ -79,7 +79,7 @@ end
             d=[4,4,4,4,4])
         fieldsequal(ND.normalize(struct_body; flatten_arrays=true, default_value=nothing), expected_table_expanded)
     end
-    @test typeof(ND.normalize(struct_body; pool_arrays=true).d) == typeof(PooledArray([4,4,4,4,4]))
+    @test typeof(ND.normalize(struct_body; pool_arrays=true, lazy_arrays=false).d) == typeof(PooledArray([4,4,4,4,4]))
 
     
     columns_defs = [
