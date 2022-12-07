@@ -1,8 +1,8 @@
-module Normalize
+module ExpandNestedData
 using PooledArrays
 using StructTypes
 
-export normalize
+export expand
 export ColumnDefinition
 
 # Link a list of keys into an underscore separted column name

@@ -1,13 +1,13 @@
-# Normalize.jl
-[![codecov](https://codecov.io/gh/mrufsvold/Normalize.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/Normalize.jl)
+# ExpandNestedData.jl
+[![codecov](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl)
 ### Documenation
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/Normalize.jl/dev)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/ExpandNestedData.jl/dev)
 
 
 #### Tl;Dr
 ```julia
-using Normalize 
+using ExpandNestedData 
 using JSON3
 using DataFrames
 
@@ -24,7 +24,7 @@ message = JSON3.read("""
     """
 )
 
-normalize(message) |> DataFrame
+expand(message) |> DataFrame
 ```
 
 #### Using Column Definitions
@@ -36,7 +36,7 @@ column_defs = [
     ColumnDefinition([:e, :f]; column_name = :MissingColumn, default_value="Missing branch")
 ]
 
-normalize(message, column_defs) |> DataFrame
+expand(message, column_defs) |> DataFrame
 ```
 
 ## Roadmap

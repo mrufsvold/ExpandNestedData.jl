@@ -1,10 +1,10 @@
 using PooledArrays
 using Test
 using JSON3
-using Normalize
+using ExpandNestedData
 using TypedTables
 
-ND = Normalize
+EN = ExpandNestedData
 
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
@@ -55,12 +55,12 @@ end
 const struct_body = JSON3.read(test_body_str, MainBody)
 
 @testset "Unguided Expand" begin
-    actual_simple_table = ND.normalize(simple_test_body)
+    actual_simple_table = EN.expand(simple_test_body)
     @test fieldsequal(actual_simple_table, expected_simple_table)
     @test eltype(actual_simple_table.data_D) == Int64
 
     # Expanding Arrays
-    actual_expanded_table = ND.normalize(test_body; flatten_arrays=true)
+    actual_expanded_table = EN.expand(test_body; flatten_arrays=true)
     @test begin
         expected_table_expanded = (
             a_b=[1,2,3,4,missing], 
@@ -77,7 +77,7 @@ const struct_body = JSON3.read(test_body_str, MainBody)
             d=[4,4,4,4])
         name_map = Dict([:a, :b] => :Column_B)
         fieldsequal(
-            ND.normalize(test_body; flatten_arrays=false, column_names = name_map), 
+            EN.expand(test_body; flatten_arrays=false, column_names = name_map), 
             expected_table)
     end
 
@@ -88,14 +88,14 @@ const struct_body = JSON3.read(test_body_str, MainBody)
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
         fieldsequal(
-            ND.normalize(struct_body; flatten_arrays=true, default_value=nothing), 
+            EN.expand(struct_body; flatten_arrays=true, default_value=nothing), 
             expected_table_expanded)
     end
-    @test (typeof(ND.normalize(struct_body; pool_arrays=true, lazy_columns=false).d) == 
+    @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
         typeof(PooledArray(Int64[])))
     
     @test fieldsequal(
-        ND.normalize(struct_body; column_style=ND.nested_columns) |> rows |> first,
+        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> first,
         (a=(b=1,c=2), d=4)
     )
 end
@@ -103,17 +103,17 @@ end
 
 @testset "Configured Expand" begin
     columns_defs = [
-        ND.ColumnDefinition([:d]),
-        ND.ColumnDefinition([:a, :b]; flatten_arrays=true),
-        ND.ColumnDefinition([:a, :c]),
-        ND.ColumnDefinition([:e, :f]; default_value="Missing branch")
+        EN.ColumnDefinition([:d]),
+        EN.ColumnDefinition([:a, :b]; flatten_arrays=true),
+        EN.ColumnDefinition([:a, :c]),
+        EN.ColumnDefinition([:e, :f]; default_value="Missing branch")
         ]
     expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
         e_f = repeat(["Missing branch"], 5)
     )
-    @test fieldsequal(ND.normalize(test_body, columns_defs), expected_table)
+    @test fieldsequal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
-        ND.normalize(test_body, columns_defs; column_style=ND.nested_columns) |> rows |> first, 
+        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> first, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
 end

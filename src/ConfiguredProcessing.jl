@@ -1,5 +1,5 @@
 """
-    normalize(data, column_defs::Vector{ColumnDefinition})
+    expand(data, column_defs::Vector{ColumnDefinition})
 
 Take a nested data structure, `data` and convert it into a `Table` based on configurations passed
 for each column.
@@ -11,7 +11,7 @@ for each column.
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function normalize(data, column_defs::ColumnDefs; lazy_columns::Bool = true, column_style::ColumnStyle=flat_columns)
+function expand(data, column_defs::ColumnDefs; lazy_columns::Bool = true, column_style::ColumnStyle=flat_columns)
     # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
     return ExpandedTable(columns, column_defs, lazy_columns, column_style)

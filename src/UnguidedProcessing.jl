@@ -1,5 +1,5 @@
 """
-    normalize(data; flatten_arrays = false, default_value = missing, pool_arrays = false, column_names=Dict{Vector{Symbol}, Symbol}())
+    expand(data; flatten_arrays = false, default_value = missing, pool_arrays = false, column_names=Dict{Vector{Symbol}, Symbol}())
 
 Take a nested data structure, `data` and convert it into a `Table`
 
@@ -15,7 +15,7 @@ Take a nested data structure, `data` and convert it into a `Table`
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function normalize(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = true,
+function expand(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = true,
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
