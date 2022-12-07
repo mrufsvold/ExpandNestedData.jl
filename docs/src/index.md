@@ -85,7 +85,7 @@ The only difference in the kwargs API here is that `column_names` is `column_nam
 a single `Symbol`.
 
 ### ColumnStyles
-In the examples above, we've used `flat_columns` style. However, we can also maintain the nesting heirarchy
+In the examples above, we've used `flat_columns` style. However, we can also maintain the nesting hierarchy
 of the source data. 
 ```@example
 using ExpandNestedData #hide
@@ -105,5 +105,5 @@ tbl |> rows |> first
 ```@docs
 ExpandNestedData.expand(::Any)
 ExpandNestedData.expand(::Any, ::Vector{ExpandNestedData.ColumnDefinition})
-ExpandNestedData.ColumnDefinition
+ExpandNestedData.ColumnDefinition(::Any;)
 ```
