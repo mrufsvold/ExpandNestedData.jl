@@ -7,6 +7,8 @@ for each column.
 ## Args
 * `data`: Any nested data structure (struct of structs or Dict of Dicts) or an array of such data structures
 * `column_defs::Vector{ColumnDefinition}`: A ColumnDefinition for each column to be extracted from the `data`
+* `column_style`: Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and
+    a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns`
 
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors

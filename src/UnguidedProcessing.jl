@@ -11,6 +11,8 @@ Take a nested data structure, `data` and convert it into a `Table`
 * `default_value`: When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing`
 * `pool_arrays`: When collecting vectors for columns, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
 * `column_names::Dict{Vector{Symbol}, Symbol}`: Provide a mapping of key/fieldname paths to replaced column names
+* `column_style`: Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and
+    a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns`
 
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
