@@ -1,13 +1,13 @@
 using Documenter
-using Normalize
+using ExpandNestedData
 
 makedocs(
-    sitename="Normalize.jl",
-    modules = Module[Normalize],
+    sitename="ExpandNestedData.jl",
+    modules = Module[ExpandNestedData],
     pages = ["Home" => "index.md"]    
 )
 
 deploydocs(
-    repo = "github.com/mrufsvold/Normalize.jl.git",
+    repo = "github.com/mrufsvold/ExpandNestedData.jl.git",
     devbranch = "main"
 )

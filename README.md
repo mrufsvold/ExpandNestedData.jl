@@ -1,14 +1,13 @@
-# Normalize.jl
-[![codecov](https://codecov.io/gh/mrufsvold/Normalize.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/Normalize.jl)
+# ExpandNestedData.jl
+[![codecov](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl)
 ### Documenation
-Stable docs are broken right now.
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://mrufsvold.github.io/Normalize.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/Normalize.jl/dev)
+
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/ExpandNestedData.jl/dev)
 
 
-#### TL;DR
+#### Tl;Dr
 ```julia
-using Normalize 
+using ExpandNestedData 
 using JSON3
 using DataFrames
 
@@ -25,7 +24,7 @@ message = JSON3.read("""
     """
 )
 
-normalize(message) |> DataFrame
+expand(message) |> DataFrame
 ```
 
 #### Using Column Definitions
@@ -37,5 +36,11 @@ column_defs = [
     ColumnDefinition([:e, :f]; column_name = :MissingColumn, default_value="Missing branch")
 ]
 
-normalize(message, column_defs) |> DataFrame
+expand(message, column_defs) |> DataFrame
 ```
+
+## Roadmap
+- [ ] Support for AbstractTree.jl input (This would enable composability with Gumbo.jl and others)
+- [ ] Return a custom Table that allows nested and flattened access to columns
+- [ ] Use custom Table as input for compressing tabular data to nested data
+

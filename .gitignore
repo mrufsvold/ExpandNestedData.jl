@@ -3,4 +3,5 @@ runner.jl
 archive
 build/*
 docs/build
-Manifest
+Manifest.toml
+next-steps.md
