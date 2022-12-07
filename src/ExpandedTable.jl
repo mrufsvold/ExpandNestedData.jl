@@ -44,7 +44,7 @@ function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_columns, poo
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays)
     return ExpandedTable(columns, col_defs, lazy_columns, column_style)
 end
-function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns::Bool, column_style)
+function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns, column_style)
     path_graph = make_path_graph(column_defs)
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(

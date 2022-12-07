@@ -2,6 +2,7 @@ using PooledArrays
 using Test
 using JSON3
 using Normalize
+using TypedTables
 
 ND = Normalize
 
@@ -81,7 +82,6 @@ const struct_body = JSON3.read(test_body_str, MainBody)
     end
 
     # Using struct of struct as input
-    
     @test begin
         expected_table_expanded = (
             a_b=[1,2,3,4,nothing], 
@@ -93,6 +93,11 @@ const struct_body = JSON3.read(test_body_str, MainBody)
     end
     @test (typeof(ND.normalize(struct_body; pool_arrays=true, lazy_columns=false).d) == 
         typeof(PooledArray(Int64[])))
+    
+    @test fieldsequal(
+        ND.normalize(struct_body; column_style=ND.nested_columns) |> rows |> first,
+        (a=(b=1,c=2), d=4)
+    )
 end
 
 
@@ -107,4 +112,8 @@ end
         e_f = repeat(["Missing branch"], 5)
     )
     @test fieldsequal(ND.normalize(test_body, columns_defs), expected_table)
+    @test fieldsequal(
+        ND.normalize(test_body, columns_defs; column_style=ND.nested_columns) |> rows |> first, 
+        (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
+    )
 end

@@ -2,3 +2,4 @@
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 PooledArrays = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
