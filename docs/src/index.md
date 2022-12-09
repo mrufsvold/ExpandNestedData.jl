@@ -48,6 +48,7 @@ per-column configurations.
 | `flatten_arrays::Bool`                        | When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`|
 | `default_value::Any`                          | When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing` |
 | `pool_arrays::Bool`                           | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
+| `lazy_columns::Bool` | If true, return columns as a custom lazy iterator instead of collecting them as materialized vectors. This option can speed things up if you only need to access a subset of rows once. It is usually better to materialize the columns since `getindex()` on the lazy columns is expensive. Default: `false` |
 | `column_names::Dict{Vector{Symbol}, Symbol}`  | Provide a mapping of key/fieldname paths to replaced column names |
 | `column_style::T<:ExpandNestedData.ColumnStyle` | Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns` |
 
