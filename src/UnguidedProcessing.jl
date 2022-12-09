@@ -10,14 +10,15 @@ Take a nested data structure, `data` and convert it into a `Table`
 * `flatten_arrays`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
 * `default_value`: When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing`
 * `pool_arrays`: When collecting vectors for columns, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
+* `lazy_columns`: If true, return columns as a custom lazy iterator instead of collecting them as materialized vectors. Default: `false`
 * `column_names::Dict{Vector{Symbol}, Symbol}`: Provide a mapping of key/fieldname paths to replaced column names
-* `column_style`: Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and
-    a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns`
+* `column_style`: Choose returned column style from `nested_columns` or `flat_columns`. If nested, `column_names` are ignored and a 
+    TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `flat_columns`
 
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
-function expand(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = true,
+function expand(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = false,
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
