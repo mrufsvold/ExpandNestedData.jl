@@ -8,8 +8,8 @@ for each column.
 * `data`: Any nested data structure (struct of structs or Dict of Dicts) or an array of such data structures
 * `column_defs::Vector{ColumnDefinition}`: A ColumnDefinition for each column to be extracted from the `data`
 * `lazy_columns`: If true, return columns as a custom lazy iterator instead of collecting them as materialized vectors. Default: `false`
-* `column_style`: Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and
-    a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns`
+* `column_style`: Choose returned column style from `nested_columns` or `flat_columns`. If nested, `column_names` are ignored and a 
+    TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `flat_columns`
 
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors

@@ -38,7 +38,7 @@ message = JSON3.read("""
 expand(message) |> DataFrame
 ```
 ## Configuring Options
-While `exapnd` can produce a `Table` out of the box, it is often useful to configure
+While `expand` can produce a `Table` out of the box, it is often useful to configure
 some options in how it handles the normalization process. `ExpandNestedData.jl` offers two ways to set
 these configurations. You can set them globally with `kwargs` or exercise finer control with
 per-column configurations.
@@ -50,7 +50,7 @@ per-column configurations.
 | `pool_arrays::Bool`                           | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
 | `lazy_columns::Bool` | If true, return columns as a custom lazy iterator instead of collecting them as materialized vectors. This option can speed things up if you only need to access a subset of rows once. It is usually better to materialize the columns since `getindex()` on the lazy columns is expensive. Default: `false` |
 | `column_names::Dict{Vector{Symbol}, Symbol}`  | Provide a mapping of key/fieldname paths to replaced column names |
-| `column_style::T<:ExpandNestedData.ColumnStyle` | Chose returned column style from `nested_columns` or `flat_columns`. If nested, column_names are ignored and a TypedTables.Table is returned for which the columns are nested in the same structure as the source data. Default: `flat_columns` |
+| `column_style::T<:ExpandNestedData.ColumnStyle` | Choose returned column style from `nested_columns` or `flat_columns`. If nested, `column_names` are ignored and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `flat_columns` |
 
 ```@example
 using ExpandNestedData #hide
@@ -91,10 +91,8 @@ of the source data.
 ```@example
 using ExpandNestedData #hide
 using JSON3 #hide
-using TypedTables
-
-
 message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4], :c => 1), Dict(:b => []) ], :d => 4) #hide
+using TypedTables
 
 tbl = expand(message; column_style = nested_columns)
 tbl.a.b[1] == 1 # true
