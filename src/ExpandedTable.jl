@@ -27,7 +27,7 @@ end
 as the source data"""
 function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
     children_tuple = NamedTuple(
-        name(child) => make_column_tuple(columns, child, lazy_columns::Bool)
+        Symbol(name(child)) => make_column_tuple(columns, child, lazy_columns::Bool)
         for child in children(path_graph)
     )
     return Table(children_tuple)
@@ -39,12 +39,16 @@ end
 
 
 """Construct an ExpandedTable from the results of `expand`"""
-function ExpandedTable(columns::ColumnSet, column_names::Dict, lazy_columns, pool_arrays, column_style)
-    paths = keys(columns)
+function ExpandedTable(columns::Dict{Vector{<:Any}, T} , column_names::Dict, lazy_columns, pool_arrays, column_style) where {T<: NestedIterator{<:Any}}
+    sym_key_columns = Dict(
+        Symbol.(k) => v 
+        for (k, v) in pairs(columns)
+    )
+    paths = keys(sym_key_columns)
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays)
-    return ExpandedTable(columns, col_defs, lazy_columns, column_style)
+    return ExpandedTable(sym_key_columns, col_defs, lazy_columns, column_style)
 end
-function ExpandedTable(columns::ColumnSet, column_defs::ColumnDefs, lazy_columns, column_style)
+function ExpandedTable(columns::Dict{Vector{Symbol}, T} , column_defs::ColumnDefs, lazy_columns, column_style) where {T<: NestedIterator{<:Any}}
     path_graph = make_path_graph(column_defs)
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
