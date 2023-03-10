@@ -211,7 +211,7 @@ end
 #####################
 
 # Convenience alias for a dictionary of columns
-ColumnSet = Dict{Vector, NestedIterator{T} where T <: Any} 
+ColumnSet = Dict{Vector, NestedIterator} 
 columnset(col) = ColumnSet([] => col)
 init_column_set(data, flatten_arrays=true) = columnset(NestedIterator(data; flatten_arrays))
 column_length(cols) = cols |> values |> first |> length 
