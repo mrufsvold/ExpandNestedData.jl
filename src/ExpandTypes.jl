@@ -102,22 +102,15 @@ flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the 
     cycling the columns values
 """
 function NestedIterator(data; flatten_arrays=false, total_length=nothing, default_value=missing)
-    @debug begin
-        "creating new NestedIterator with dtype:"
-        typeof(data)
-    end
+    @debug "creating new NestedIterator with dtype: $(typeof(data))"
     value = if flatten_arrays && typeof(data) <: AbstractArray
         length(data) >= 1 ? data : [default_value]
     else
         [data]
     end
     len = length(value)
-    @debug begin
-        "after ensuring value is wrapped in vector, we have the following number of elements"
-        len
-        len == 0 ? data : nothing
-    end
-
+    @debug "after ensuring value is wrapped in vector, we have the following number of elements $len"
+    len == 0 && @debug "data was $data"
     type = eltype(value)
     f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
     ni = NestedIterator{type}(f, len, Set(value))
