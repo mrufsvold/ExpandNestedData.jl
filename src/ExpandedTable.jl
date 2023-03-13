@@ -4,21 +4,9 @@ using TypedTables
 
 @enum ColumnStyle flat_columns nested_columns
 
-"""
-The functionality we want here is:
 
-t = ExpandedTable(columns, column_names)
-
-t.a_c == [2, missing, 1, missing]
-t.a.c == [2, missing, 1, missing]
-
-eachrow(t, :flatten) |> first == (a_b = 1, a_c = 2, d= 4)
-eachrow(t, :nested) |> first == (a = (b = 1, c = 2), d = 4)
-names(t) ==(a_b, a_c, d)
-
-"""
 struct ExpandedTable
-    col_lookup # Dict( column_name => path )
+    col_lookup::Dict{Symbol, Vector}
     columns # TypedTable, nested in the same pattern as src_data
 end
 

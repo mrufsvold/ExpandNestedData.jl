@@ -241,13 +241,13 @@ the input columns. i.e.
 column_set_product!(
     Dict(
         [:a] => [1,2],
-        [:b] =? [3,4,5]
+        [:b] => [3,4,5]
     )
 )
 returns
 Dict(
     [:a] => [1,1,1,2,2,2],
-    [:b] =? [3,4,5,3,4,5]
+    [:b] => [3,4,5,3,4,5]
 )
 """
 function column_set_product!(cols::ColumnSet)
