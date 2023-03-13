@@ -16,16 +16,16 @@ function has_namevaluecontainer_element(itr)
         return itr |> eltype |> get_member_types .|> is_NameValueContainer |> any
     end
 end
-get_member_types(T) = T isa Union ? Base.uniontypes(T) : [T]
+get_member_types(::Type{T}) where T = T isa Union ? Base.uniontypes(T) : [T]
 
 """Define a pairs iterator for all DataType structs"""
 get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
-get_pairs(::StructTypes.DataType, x) = ((p, getproperty(x, p)) for p in fieldnames(typeof(x)))
+get_pairs(::StructTypes.DataType, x::T) where T = ((p, getproperty(x, p)) for p in fieldnames(T))
 get_pairs(::StructTypes.DictType, x) = pairs(x)
 
 """Get the keys/names of any NameValueContainer"""
 get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
-get_names(::StructTypes.DataType, x) = (n for n in fieldnames(typeof(x)))
+get_names(::StructTypes.DataType, x::T) where T = (n for n in fieldnames(T))
 get_names(::StructTypes.DictType, x) = keys(x)
 
 get_value(x::T, name) where T = get_value(StructTypes.StructType(T), x, name)
@@ -104,9 +104,9 @@ data::Any: seed value
 flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the array as a single value when 
     cycling the columns values
 """
-function NestedIterator(data; flatten_arrays=false, total_length=nothing, default_value=missing)
-    @debug "creating new NestedIterator with dtype: $(typeof(data))"
-    value = if flatten_arrays && typeof(data) <: AbstractArray
+function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, default_value=missing) where T
+    @debug "creating new NestedIterator with dtype: $(T)"
+    value = if flatten_arrays && T <: AbstractArray
         length(data) >= 1 ? data : [default_value]
     else
         [data]
