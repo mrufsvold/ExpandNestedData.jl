@@ -136,8 +136,11 @@ end
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
 struct ColumnDefinition
+    # Path to values
     field_path
+    # Index of current level TODO: should be removed and stored externally
     path_index::Int64
+    # name of this column in the table once expanded
     column_name::Symbol
     flatten_arrays::Bool
     default_value
@@ -199,6 +202,8 @@ function analyze_column_defs(col_defs::ColumnDefs)
     return (unique_names, names_with_children)
 end
 
+# TODO: This is a huge source of unnecessary allocations. We should be storing level outside this struct
+# and passing along the same defs without copying
 function make_column_def_child_copies(column_defs::ColumnDefs, name)
     return filter((def -> is_current_name(def, name)), column_defs) .|>
         (def -> ColumnDefinition(
@@ -326,7 +331,7 @@ function make_path_nodes(column_defs)
 
         children_col_defs = make_column_def_child_copies(matching_defs, unique_name)
         if any(are_value_nodes)
-            throw(ArgumentError("The path name $unique_name refers a value in one branch and to nested child(ren): $(field_path.(children_names))"))
+            throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_names))"))
         end
         nodes[i] = PathNode(unique_name, make_path_nodes(children_col_defs))
     end

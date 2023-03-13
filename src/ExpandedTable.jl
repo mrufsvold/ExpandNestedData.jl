@@ -6,7 +6,7 @@ using TypedTables
 
 
 struct ExpandedTable
-    col_lookup::Dict{Symbol, Vector}
+    col_lookup::Dict{Symbol, Vector} # Name of column => path into nested data
     columns # TypedTable, nested in the same pattern as src_data
 end
 
