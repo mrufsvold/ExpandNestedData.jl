@@ -17,7 +17,7 @@ for each column.
 function expand(data, column_defs::ColumnDefs; lazy_columns::Bool = false, column_style::ColumnStyle=flat_columns)
     # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
-    return ExpandedTable(columns, column_defs, lazy_columns, column_style)
+    return ExpandedTable(columns, column_defs; lazy_columns = lazy_columns, column_style = column_style)
 end
 
 

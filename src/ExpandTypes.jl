@@ -58,6 +58,7 @@ function repeat_each!(c::NestedIterator, n)
         c.get_index = c.get_index ∘ ((i) -> unrepeat_each(i, n))
     end
     c.column_length *= n
+    return c
 end
 unrepeat_each(i, n) = ceil(Int64, i/n)
 
@@ -70,6 +71,7 @@ function cycle!(c::NestedIterator, n)
         c.get_index = c.get_index ∘ ((i::Int64) -> uncycle(i, l))
     end
     c.column_length *= n
+    return c
 end
 uncycle(i,n) = mod((i-1),n) + 1
 
@@ -83,7 +85,8 @@ function stack(c1::NestedIterator, c2::NestedIterator)
     continue_tracking_uniques = 0 < length(c1.unique_values) < 100 &&
                                 0 < length(c2.unique_values) < 100
     values = continue_tracking_uniques ? union(c1.unique_values, c2.unique_values) : Set{type}([])
-
+    
+    # If the new column only has one unique value, just keep the first column's getter func
     f = length(values) == 1 ?
         c1.get_index :
         ((i::Int64) -> unstack(i, length(c1), c1.get_index, c2.get_index))

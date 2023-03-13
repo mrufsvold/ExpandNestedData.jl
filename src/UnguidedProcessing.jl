@@ -22,7 +22,7 @@ function expand(data; flatten_arrays::Bool = false, default_value = missing, laz
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    return ExpandedTable(columns, column_names, lazy_columns, pool_arrays, column_style)
+    return ExpandedTable(columns, column_names; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style)
 end
 
 
@@ -48,7 +48,7 @@ function process_node(data::AbstractArray{T}; kwargs...) where {T}
 end
 
 
-# handle unpacking arraylike objects
+# handle unpacking array-like objects
 function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
     if length(data) == 0
         return columnset(NestedIterator(kwargs[:default_value]))
@@ -70,7 +70,7 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
 end
 
 
-# Handle a name-value pair object
+# Handle a name-value pair object (dict or struct)
 function process_node(::D, data; kwargs...) where D <: NameValueContainer
     columns = ColumnSet()
     multiplier = 1
