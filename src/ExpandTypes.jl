@@ -331,7 +331,7 @@ function make_path_nodes(column_defs)
 
         children_col_defs = make_column_def_child_copies(matching_defs, unique_name)
         if any(are_value_nodes)
-            throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_names))"))
+            throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_col_defs))"))
         end
         nodes[i] = PathNode(unique_name, make_path_nodes(children_col_defs))
     end
