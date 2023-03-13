@@ -269,7 +269,7 @@ column, cycle all the short columns to match the length of the longest
 function cycle_columns_to_length!(cols::ColumnSet)
     longest = cols |> values .|> length |> maximum
     for child_column in values(cols)
-        catchup_mult = Int(longest / length(child_column))
+        catchup_mult = longest ÷ length(child_column)
         cycle!(child_column, catchup_mult)
     end
 end
