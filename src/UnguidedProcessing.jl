@@ -49,7 +49,7 @@ end
 
 
 # handle unpacking array-like objects
-function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
+function process_node(::ArrayLike, data; kwargs...) where ArrayLike <: StructTypes.ArrayType
     if length(data) == 0
         return columnset(NestedIterator(kwargs[:default_value]))
     elseif  length(data) == 1
@@ -72,20 +72,23 @@ end
 
 
 # Handle a name-value pair object (dict or struct)
-function process_node(::D, data; kwargs...) where D <: NameValueContainer
+function process_node(::DictOrStruct, data; kwargs...) where DictOrStruct <: NameValueContainer
     columns = ColumnSet()
     multiplier = Ref{Int}(1)
     for (child_name, child_data) in get_pairs(data)
         curr_mult = multiplier[]
         # Collect columns from the child's data
         child_columns = process_node(child_data; kwargs...)
-        # Add the child's name to the key of all columns
-        prepend_name!(child_columns, child_name)
-        # Need to repeat each value for all of the values of the previous children
-        # to make a product of values
-        repeat_each!.(values(child_columns), curr_mult)
-        multiplier[] = curr_mult * column_length(child_columns)
-        merge!(columns, child_columns)
+        
+        if length(child_columns) > 0
+            # Add the child's name to the key of all columns
+            prepend_name!(child_columns, child_name)
+            # Need to repeat each value for all of the values of the previous children
+            # to make a product of values
+            repeat_each!.(values(child_columns), curr_mult)
+            multiplier[] = curr_mult * column_length(child_columns)
+            merge!(columns, child_columns)
+        end
     end
     if length(columns) > 0
         # catch up short columns with the total length for this group

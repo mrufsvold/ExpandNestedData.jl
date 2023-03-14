@@ -110,6 +110,11 @@ const struct_body = JSON3.read(test_body_str, MainBody)
     # expected_het_test = (data=[Dict(:E => 8),5],)
     @test_throws ArgumentError EN.expand(heterogenous_level_test_body)
 
+    empty_dict_field = Dict(
+        :a => Dict(),
+        :b => 5
+    )
+    @test fieldsequal(EN.expand(empty_dict_field), (b = [5],))
 end
 
 
