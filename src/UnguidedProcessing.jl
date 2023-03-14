@@ -56,11 +56,9 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
         return process_node(first(data); kwargs...)
     end
 
-
     all_column_sets = process_node.(data; kwargs...)
 
     unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
-
     column_set = ColumnSet()
     for name in unique_names
         # For each unique column name, get that column for the results of processing each element
