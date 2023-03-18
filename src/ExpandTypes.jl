@@ -118,7 +118,8 @@ function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, def
     f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
     ni = NestedIterator{type}(f, len, Set(value))
     if !(total_length isa Nothing)
-        cycle!(ni, total_length)
+        cycles_needed = total_length ÷ len
+        cycle!(ni, cycles_needed)
     end
     return ni
 end
