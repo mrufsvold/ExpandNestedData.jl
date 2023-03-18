@@ -37,10 +37,12 @@ get_value(::StructTypes.DictType, x, name) = x[name]
 ##########################
 
 """NestedIterator is a container for instructions that build columns"""
-mutable struct NestedIterator{T} <: AbstractArray{T, 1}
+struct NestedIterator{T} <: AbstractArray{T, 1}
     get_index::Function
     column_length::Int64
-    unique_values::Set{T}
+    el_type::Type{T}
+    one_value::Bool
+    unique_val::Ref{T}
 end
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
@@ -48,52 +50,69 @@ Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
 Base.eachindex(ni::NestedIterator) = 1:length(ni)
 
 
-Base.collect(x::NestedIterator, pool_arrays) = pool_arrays && !(x.unique_values isa Nothing) ? PooledArray(x) : Vector(x)
+Base.collect(x::NestedIterator, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
 
+abstract type InstructionCapture <: Function end
+
+struct Seed{T} <: InstructionCapture
+    data::Vector{T}
+end
+(s::Seed)(i) = s.data[i]
+
+struct UnrepeatEach <: InstructionCapture
+    n::Int64
+end
+(u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
 
 """repeat_each!(c, N) will return an array where each source element appears N times in a row"""
-function repeat_each!(c::NestedIterator, n)
-    # when there is only one unique value, we can skip composing the unrepeat_each step
-    if length(c.unique_values) != 1
-        c.get_index = c.get_index ∘ ((i) -> unrepeat_each(i, n))
+function repeat_each!(c::NestedIterator{T}, n) where T
+    # when there is only one unique value, we can skip composing the repeat_each step
+    return if c.one_value
+        NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
+    else
+        NestedIterator(c.get_index ∘ UnrepeatEach(n), c.column_length * n, T, false, c.unique_val)
     end
-    c.column_length *= n
-    return c
 end
-unrepeat_each(i, n) = ceil(Int64, i/n)
 
-
+struct Uncycle <: InstructionCapture
+    n::Int64
+end
+(u::Uncycle)(i) = mod((i-1),u.n) + 1
 """cycle!(c, n) cycles through an array N times"""
-function cycle!(c::NestedIterator, n)
+function cycle!(c::NestedIterator{T}, n) where T
     # when there is only one unique value, we can skip composing the uncycle step
-    if length(c.unique_values) != 1
+    return if c.one_value
+        NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
+    else
         l = length(c)
-        c.get_index = c.get_index ∘ ((i::Int64) -> uncycle(i, l))
+        NestedIterator(c.get_index ∘ Uncycle(l), c.column_length * n, T, false, c.unique_val)
     end
-    c.column_length *= n
-    return c
 end
-uncycle(i,n) = mod((i-1),n) + 1
+
+
+struct Unstack{F, G} <: InstructionCapture
+    f_len::Int64
+    f::F
+    g::G 
+end
+(u::Unstack)(i) = i > u.f_len ? u.g(i-u.f_len) : u.f(i)
 
 """stack(c1::NestedIterator, c2::NestedIterator)
 Return a single NestedIterator which is the result of vcat(c1,c2)
 """
-function stack(c1::NestedIterator, c2::NestedIterator)
-    type = Union{eltype(c1), eltype(c2)}
+function stack(c1::NestedIterator{T}, c2::NestedIterator{U}) where {T, U}
+    type = Union{T, U}
     len = (c1,c2) .|> length |> sum
 
-    continue_tracking_uniques = 0 < length(c1.unique_values) < 100 &&
-                                0 < length(c2.unique_values) < 100
-    values = continue_tracking_uniques ? union(c1.unique_values, c2.unique_values) : Set{type}([])
-    
-    # If the new column only has one unique value, just keep the first column's getter func
-    f = length(values) == 1 ?
-        c1.get_index :
-        ((i::Int64) -> unstack(i, length(c1), c1.get_index, c2.get_index))
-    
-    return NestedIterator{type}(f, len, values)
+    if T <: U
+        only_one_value = c1.one_value && c2.one_value && isequal(c1.unique_val[], c2.unique_val[])
+        if only_one_value
+            return NestedIterator(c1.get_index, len, type, true, c1.unique_val)
+        end
+    end
+    NestedIterator(Unstack(length(c1), c1.get_index, c2.get_index), len, type, false, Ref{type}())
 end
-unstack(i::Int64, c1_len::Int64, f1::Function, f2::Function) = i > c1_len ? f2(i-c1_len) : f1(i)
+
 
 
 """
@@ -115,8 +134,11 @@ function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, def
     @debug "after ensuring value is wrapped in vector, we have the following number of elements $len"
     len == 0 && @debug "data was $data"
     type = eltype(value)
-    f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
-    ni = NestedIterator{type}(f, len, Set(value))
+    f = Seed(value)
+    is_one = len == 1
+    unique_val = is_one ? Ref{type}(first(value)) : Ref{type}()
+
+    ni = NestedIterator(f, len, type, is_one, unique_val)
     if !(total_length isa Nothing)
         cycles_needed = total_length ÷ len
         cycle!(ni, cycles_needed)
