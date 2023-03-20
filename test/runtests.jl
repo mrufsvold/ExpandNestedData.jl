@@ -44,13 +44,23 @@ end
             [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
             [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
         )
-    @test isequal(
-            ExpandNestedData.column_set_product!(col_set),
-            ExpandNestedData.ColumnSet(
+
+    @test begin
+        raw_actual = ExpandNestedData.column_set_product!(col_set)
+        actual_set = Set([
+            (a=A, b=B)
+            for (A,B) in zip(raw_actual[[:a]], raw_actual[[:b]])
+        ])
+        raw_expected = ExpandNestedData.ColumnSet(
                 [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]; flatten_arrays = true),
                 [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]; flatten_arrays = true),
             )
-        )
+        expected_set = Set([
+            (a=A, b=B)
+            for (A,B) in zip(raw_expected[[:a]], raw_expected[[:b]])
+        ])
+        isequal(actual_set, expected_set)
+    end 
 end
 
 
