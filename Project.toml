@@ -1,7 +1,7 @@
 name = "ExpandNestedData"
 uuid = "8a7d223a-a7dc-4abf-8bc1-b0ce2ace9adc"
 authors = ["Micah Rufsvold <mjrufsvold@protonmail.com>"]
-version = "0.1.0"
+version = "0.1.2"
 
 [deps]
 PooledArrays = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
