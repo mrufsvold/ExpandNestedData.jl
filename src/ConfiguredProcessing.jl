@@ -54,9 +54,13 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
         else
             make_missing_column_set(child_col_defs, path_index(first(col_defs)))
         end
-        repeat_each!.(values(child_columns), multiplier)
-        multiplier_container[] = multiplier * column_length(child_columns)
-        merge!(columns, child_columns)
+
+        match_len_child_cols = Dict(
+            key => repeat_each(col, multiplier)
+            for (key, col) in child_columns
+        )
+        multiplier_container[] = multiplier * column_length(match_len_child_cols)
+        merge!(columns, match_len_child_cols)
     end
     # catch up short columns with the total length for this group
     cycle_columns_to_length!(columns)

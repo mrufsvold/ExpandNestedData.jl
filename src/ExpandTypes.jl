@@ -55,7 +55,7 @@ Base.collect(x::NestedIterator, pool_arrays) = pool_arrays ? PooledArray(x) : Ve
 abstract type InstructionCapture <: Function end
 
 struct Seed{T} <: InstructionCapture
-    data::Vector{T}
+    data::T
 end
 (s::Seed)(i) = s.data[i]
 
@@ -64,8 +64,8 @@ struct UnrepeatEach <: InstructionCapture
 end
 (u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
 
-"""repeat_each!(c, N) will return an array where each source element appears N times in a row"""
-function repeat_each!(c::NestedIterator{T}, n) where T
+"""repeat_each(c, N) will return an array where each source element appears N times in a row"""
+function repeat_each(c::NestedIterator{T}, n) where T
     # when there is only one unique value, we can skip composing the repeat_each step
     return if c.one_value
         NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
@@ -78,10 +78,10 @@ struct Uncycle <: InstructionCapture
     n::Int64
 end
 (u::Uncycle)(i) = mod((i-1),u.n) + 1
-"""cycle!(c, n) cycles through an array N times"""
-function cycle!(c::NestedIterator{T}, n) where T
+"""cycle(c, n) cycles through an array N times"""
+function cycle(c::NestedIterator{T}, n) where T
     # when there is only one unique value, we can skip composing the uncycle step
-    return if c.one_value
+    return if c.one_value && !(typeof(c.get_index) <: Seed)
         NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
     else
         l = length(c)
@@ -124,34 +124,29 @@ flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the 
     cycling the columns values
 """
 function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, default_value=missing) where T
-    @debug "creating new NestedIterator with dtype: $(T)"
     value = if flatten_arrays && T <: AbstractArray
         length(data) >= 1 ? data : [default_value]
     else
         [data]
     end
     len = length(value)
-    @debug "after ensuring value is wrapped in vector, we have the following number of elements $len"
-    len == 0 && @debug "data was $data"
-    type = eltype(value)
+    ncycle = total_length isa Nothing ? 1 : total_length ÷ len
+    return _NestedIterator(value, len, ncycle)
+end
+
+function _NestedIterator(value::AbstractArray{T}, len::Int64, ncycle::Int64) where T
     f = Seed(value)
     is_one = len == 1
-    unique_val = is_one ? Ref{type}(first(value)) : Ref{type}()
-
-    ni = NestedIterator(f, len, type, is_one, unique_val)
-    if !(total_length isa Nothing)
-        cycles_needed = total_length ÷ len
-        cycle!(ni, cycles_needed)
+    unique_val = Ref{T}()
+    if is_one
+        unique_val[] = first(value)::T
     end
-    return ni
+    ni = NestedIterator{T}(f, len, T, is_one, unique_val)
+    return cycle(ni, ncycle)
 end
 
 
-function missing_column(default, len=1)
-    col = NestedIterator(default)
-    cycle!(col, len)
-    return col
-end
+missing_column(default, len=1) = return NestedIterator(default; total_length=len)
 
 
 ##### ColumnDefinition #####
@@ -280,11 +275,12 @@ Dict(
 """
 function column_set_product!(cols::ColumnSet)
     multiplier = 1
-    for child_column in values(cols)
-        repeat_each!(child_column, multiplier)
+    for (key, child_column) in pairs(cols)
+        cols[key] = repeat_each(child_column, multiplier)
         multiplier *= length(child_column)
     end
-    cycle_columns_to_length!(cols)
+    cols = cycle_columns_to_length!(cols)
+    return cols
 end
 
 
@@ -296,15 +292,12 @@ column, cycle all the short columns to match the length of the longest
 """
 function cycle_columns_to_length!(cols::ColumnSet)
     col_lengths = cols |> values .|> length
-    if any(col_lengths .== 0)
-        @show cols
-        @show col_lengths
-    end
     longest = col_lengths |> maximum
-    for child_column in values(cols)
+    for (key, child_column) in pairs(cols)
         catchup_mult = longest ÷ length(child_column)
-        cycle!(child_column, catchup_mult)
+        cols[key] = cycle(child_column, catchup_mult)
     end
+    return cols
 end
 
 """Return a missing column for each member of a ColumnDefs"""

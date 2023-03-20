@@ -22,6 +22,37 @@ function fieldsequal(o1, o2)
     return true
 end
 
+@testset "Internals" begin
+    iter1 = ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true)
+    @test [1,2] == collect(iter1)
+    @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1, 2))
+    @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
+    @test [1,2,1,2] == collect(ExpandNestedData.stack(iter1, iter1))
+    col_set = ExpandNestedData.ColumnSet(
+        [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
+        [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+    )
+    @test isequal(
+            ExpandNestedData.cycle_columns_to_length!(col_set),
+            ExpandNestedData.ColumnSet(
+                [:a] => ExpandNestedData.NestedIterator([1,2,1,2]; flatten_arrays = true),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+            )
+        )
+
+    col_set = ExpandNestedData.ColumnSet(
+            [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
+            [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+        )
+    @test isequal(
+            ExpandNestedData.column_set_product!(col_set),
+            ExpandNestedData.ColumnSet(
+                [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]; flatten_arrays = true),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]; flatten_arrays = true),
+            )
+        )
+end
+
 
 # Source Data
 const simple_test_body = JSON3.read("""

@@ -85,9 +85,12 @@ function process_node(::DictOrStruct, data; kwargs...) where DictOrStruct <: Nam
             prepend_name!(child_columns, child_name)
             # Need to repeat each value for all of the values of the previous children
             # to make a product of values
-            repeat_each!.(values(child_columns), curr_mult)
+            match_len_child_cols = Dict(
+                key => repeat_each(col, curr_mult)
+                for (key, col) in child_columns
+            )
             multiplier[] = curr_mult * column_length(child_columns)
-            merge!(columns, child_columns)
+            merge!(columns, match_len_child_cols)
         end
     end
     if length(columns) > 0
