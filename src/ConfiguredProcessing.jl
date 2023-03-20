@@ -17,7 +17,7 @@ for each column.
 function expand(data, column_defs::ColumnDefs; lazy_columns::Bool = false, column_style::ColumnStyle=flat_columns)
     # TODO we should parse the user's column definitions into a graph before processing
     columns = process_node(data, column_defs)
-    return ExpandedTable(columns, column_defs, lazy_columns, column_style)
+    return ExpandedTable(columns, column_defs; lazy_columns = lazy_columns, column_style = column_style)
 end
 
 
@@ -30,9 +30,10 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
     (names, names_with_children) = analyze_column_defs(col_defs)
     columns = ColumnSet()
     data_names = get_names(data)
-    multiplier = 1
+    multiplier_container = Ref{Int}(1)
     for name in names
-        # This creates a view of configured columns to pass down
+        multiplier = multiplier_container[]
+        # This creates a copy of configured columns to pass down
         child_col_defs = make_column_def_child_copies(col_defs, name)
 
         # Get child columns in 1 of 3 cases: 
@@ -46,16 +47,20 @@ function process_node(::D, data, col_defs::ColumnDefs) where D <: NameValueConta
                 col_def = first(child_col_defs)
                 new_column = NestedIterator(child_data; 
                     flatten_arrays = flatten_arrays(col_def), default_value=default_value(col_def))
-                Dict([] => new_column)
+                columnset(new_column)
             end
             prepend_name!(child_columns, name)
             child_columns
         else
             make_missing_column_set(child_col_defs, path_index(first(col_defs)))
         end
-        repeat_each!.(values(child_columns), multiplier)
-        multiplier *= column_length(child_columns)
-        merge!(columns, child_columns)
+
+        match_len_child_cols = Dict(
+            key => repeat_each(col, multiplier)
+            for (key, col) in child_columns
+        )
+        multiplier_container[] = multiplier * column_length(match_len_child_cols)
+        merge!(columns, match_len_child_cols)
     end
     # catch up short columns with the total length for this group
     cycle_columns_to_length!(columns)

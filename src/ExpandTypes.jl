@@ -16,16 +16,16 @@ function has_namevaluecontainer_element(itr)
         return itr |> eltype |> get_member_types .|> is_NameValueContainer |> any
     end
 end
-get_member_types(T) = T isa Union ? Base.uniontypes(T) : [T]
+get_member_types(::Type{T}) where T = T isa Union ? Base.uniontypes(T) : [T]
 
 """Define a pairs iterator for all DataType structs"""
 get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
-get_pairs(::StructTypes.DataType, x) = ((p, getproperty(x, p)) for p in fieldnames(typeof(x)))
+get_pairs(::StructTypes.DataType, x::T) where T = ((p, getproperty(x, p)) for p in fieldnames(T))
 get_pairs(::StructTypes.DictType, x) = pairs(x)
 
 """Get the keys/names of any NameValueContainer"""
 get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
-get_names(::StructTypes.DataType, x) = (n for n in fieldnames(typeof(x)))
+get_names(::StructTypes.DataType, x::T) where T = (n for n in fieldnames(T))
 get_names(::StructTypes.DictType, x) = keys(x)
 
 get_value(x::T, name) where T = get_value(StructTypes.StructType(T), x, name)
@@ -37,10 +37,12 @@ get_value(::StructTypes.DictType, x, name) = x[name]
 ##########################
 
 """NestedIterator is a container for instructions that build columns"""
-mutable struct NestedIterator{T} <: AbstractArray{T, 1}
+struct NestedIterator{T} <: AbstractArray{T, 1}
     get_index::Function
     column_length::Int64
-    unique_values::Set{T}
+    el_type::Type{T}
+    one_value::Bool
+    unique_val::Ref{T}
 end
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
@@ -48,49 +50,69 @@ Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
 Base.eachindex(ni::NestedIterator) = 1:length(ni)
 
 
-Base.collect(x::NestedIterator, pool_arrays) = pool_arrays && !(x.unique_values isa Nothing) ? PooledArray(x) : Vector(x)
+Base.collect(x::NestedIterator, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
 
+abstract type InstructionCapture <: Function end
 
-"""repeat_each!(c, N) will return an array where each source element appears N times in a row"""
-function repeat_each!(c::NestedIterator, n)
-    # when there is only one unique value, we can skip composing the unrepeat_each step
-    if length(c.unique_values) != 1
-        c.get_index = c.get_index ∘ ((i) -> unrepeat_each(i, n))
-    end
-    c.column_length *= n
+struct Seed{T} <: InstructionCapture
+    data::T
 end
-unrepeat_each(i, n) = ceil(Int64, i/n)
+(s::Seed)(i) = s.data[i]
 
+struct UnrepeatEach <: InstructionCapture
+    n::Int64
+end
+(u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
 
-"""cycle!(c, n) cycles through an array N times"""
-function cycle!(c::NestedIterator, n)
+"""repeat_each(c, N) will return an array where each source element appears N times in a row"""
+function repeat_each(c::NestedIterator{T}, n) where T
+    # when there is only one unique value, we can skip composing the repeat_each step
+    return if c.one_value
+        NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
+    else
+        NestedIterator(c.get_index ∘ UnrepeatEach(n), c.column_length * n, T, false, c.unique_val)
+    end
+end
+
+struct Uncycle <: InstructionCapture
+    n::Int64
+end
+(u::Uncycle)(i) = mod((i-1),u.n) + 1
+"""cycle(c, n) cycles through an array N times"""
+function cycle(c::NestedIterator{T}, n) where T
     # when there is only one unique value, we can skip composing the uncycle step
-    if length(c.unique_values) != 1
+    return if c.one_value && !(typeof(c.get_index) <: Seed)
+        NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
+    else
         l = length(c)
-        c.get_index = c.get_index ∘ ((i::Int64) -> uncycle(i, l))
+        NestedIterator(c.get_index ∘ Uncycle(l), c.column_length * n, T, false, c.unique_val)
     end
-    c.column_length *= n
 end
-uncycle(i,n) = mod((i-1),n) + 1
+
+
+struct Unstack{F, G} <: InstructionCapture
+    f_len::Int64
+    f::F
+    g::G 
+end
+(u::Unstack)(i) = i > u.f_len ? u.g(i-u.f_len) : u.f(i)
 
 """stack(c1::NestedIterator, c2::NestedIterator)
 Return a single NestedIterator which is the result of vcat(c1,c2)
 """
-function stack(c1::NestedIterator, c2::NestedIterator)
-    type = Union{eltype(c1), eltype(c2)}
+function stack(c1::NestedIterator{T}, c2::NestedIterator{U}) where {T, U}
+    type = Union{T, U}
     len = (c1,c2) .|> length |> sum
 
-    continue_tracking_uniques = 0 < length(c1.unique_values) < 100 &&
-                                0 < length(c2.unique_values) < 100
-    values = continue_tracking_uniques ? union(c1.unique_values, c2.unique_values) : Set{type}([])
-
-    f = length(values) == 1 ?
-        c1.get_index :
-        ((i::Int64) -> unstack(i, length(c1), c1.get_index, c2.get_index))
-    
-    return NestedIterator{type}(f, len, values)
+    if T <: U
+        only_one_value = c1.one_value && c2.one_value && isequal(c1.unique_val[], c2.unique_val[])
+        if only_one_value
+            return NestedIterator(c1.get_index, len, type, true, c1.unique_val)
+        end
+    end
+    NestedIterator(Unstack(length(c1), c1.get_index, c2.get_index), len, type, false, Ref{type}())
 end
-unstack(i::Int64, c1_len::Int64, f1::Function, f2::Function) = i > c1_len ? f2(i-c1_len) : f1(i)
+
 
 
 """
@@ -101,31 +123,30 @@ data::Any: seed value
 flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the array as a single value when 
     cycling the columns values
 """
-function NestedIterator(data; flatten_arrays=false, total_length=nothing, default_value=missing)
-    @debug "creating new NestedIterator with dtype: $(typeof(data))"
-    value = if flatten_arrays && typeof(data) <: AbstractArray
+function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, default_value=missing) where T
+    value = if flatten_arrays && T <: AbstractArray
         length(data) >= 1 ? data : [default_value]
     else
         [data]
     end
     len = length(value)
-    @debug "after ensuring value is wrapped in vector, we have the following number of elements $len"
-    len == 0 && @debug "data was $data"
-    type = eltype(value)
-    f = len == 1 ? ((::Int64) -> value[1]) : ((i::Int64) -> value[i])
-    ni = NestedIterator{type}(f, len, Set(value))
-    if !(total_length isa Nothing)
-        cycle!(ni, total_length)
+    ncycle = total_length isa Nothing ? 1 : total_length ÷ len
+    return _NestedIterator(value, len, ncycle)
+end
+
+function _NestedIterator(value::AbstractArray{T}, len::Int64, ncycle::Int64) where T
+    f = Seed(value)
+    is_one = len == 1
+    unique_val = Ref{T}()
+    if is_one
+        unique_val[] = first(value)::T
     end
-    return ni
+    ni = NestedIterator{T}(f, len, T, is_one, unique_val)
+    return cycle(ni, ncycle)
 end
 
 
-function missing_column(default, len=1)
-    col = NestedIterator(default)
-    cycle!(col, len)
-    return col
-end
+missing_column(default, len=1) = return NestedIterator(default; total_length=len)
 
 
 ##### ColumnDefinition #####
@@ -133,8 +154,11 @@ end
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
 struct ColumnDefinition
+    # Path to values
     field_path
+    # Index of current level TODO: should be removed and stored externally
     path_index::Int64
+    # name of this column in the table once expanded
     column_name::Symbol
     flatten_arrays::Bool
     default_value
@@ -196,6 +220,8 @@ function analyze_column_defs(col_defs::ColumnDefs)
     return (unique_names, names_with_children)
 end
 
+# TODO: This is a huge source of unnecessary allocations. We should be storing level outside this struct
+# and passing along the same defs without copying
 function make_column_def_child_copies(column_defs::ColumnDefs, name)
     return filter((def -> is_current_name(def, name)), column_defs) .|>
         (def -> ColumnDefinition(
@@ -238,22 +264,23 @@ the input columns. i.e.
 column_set_product!(
     Dict(
         [:a] => [1,2],
-        [:b] =? [3,4,5]
+        [:b] => [3,4,5]
     )
 )
 returns
 Dict(
     [:a] => [1,1,1,2,2,2],
-    [:b] =? [3,4,5,3,4,5]
+    [:b] => [3,4,5,3,4,5]
 )
 """
 function column_set_product!(cols::ColumnSet)
     multiplier = 1
-    for child_column in values(cols)
-        repeat_each!(child_column, multiplier)
+    for (key, child_column) in pairs(cols)
+        cols[key] = repeat_each(child_column, multiplier)
         multiplier *= length(child_column)
     end
-    cycle_columns_to_length!(cols)
+    cols = cycle_columns_to_length!(cols)
+    return cols
 end
 
 
@@ -264,11 +291,13 @@ Given a column set where the length of all columns is some factor of the length 
 column, cycle all the short columns to match the length of the longest
 """
 function cycle_columns_to_length!(cols::ColumnSet)
-    longest = cols |> values .|> length |> maximum
-    for child_column in values(cols)
-        catchup_mult = Int(longest / length(child_column))
-        cycle!(child_column, catchup_mult)
+    col_lengths = cols |> values .|> length
+    longest = col_lengths |> maximum
+    for (key, child_column) in pairs(cols)
+        catchup_mult = longest ÷ length(child_column)
+        cols[key] = cycle(child_column, catchup_mult)
     end
+    return cols
 end
 
 """Return a missing column for each member of a ColumnDefs"""
@@ -323,7 +352,7 @@ function make_path_nodes(column_defs)
 
         children_col_defs = make_column_def_child_copies(matching_defs, unique_name)
         if any(are_value_nodes)
-            throw(ArgumentError("The path name $unique_name refers a value in one branch and to nested child(ren): $(field_path.(children_names))"))
+            throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_col_defs))"))
         end
         nodes[i] = PathNode(unique_name, make_path_nodes(children_col_defs))
     end

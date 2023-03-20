@@ -22,6 +22,47 @@ function fieldsequal(o1, o2)
     return true
 end
 
+@testset "Internals" begin
+    iter1 = ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true)
+    @test [1,2] == collect(iter1)
+    @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1, 2))
+    @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
+    @test [1,2,1,2] == collect(ExpandNestedData.stack(iter1, iter1))
+    col_set = ExpandNestedData.ColumnSet(
+        [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
+        [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+    )
+    @test isequal(
+            ExpandNestedData.cycle_columns_to_length!(col_set),
+            ExpandNestedData.ColumnSet(
+                [:a] => ExpandNestedData.NestedIterator([1,2,1,2]; flatten_arrays = true),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+            )
+        )
+
+    col_set = ExpandNestedData.ColumnSet(
+            [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
+            [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+        )
+
+    @test begin
+        raw_actual = ExpandNestedData.column_set_product!(col_set)
+        actual_set = Set([
+            (a=A, b=B)
+            for (A,B) in zip(raw_actual[[:a]], raw_actual[[:b]])
+        ])
+        raw_expected = ExpandNestedData.ColumnSet(
+                [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]; flatten_arrays = true),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]; flatten_arrays = true),
+            )
+        expected_set = Set([
+            (a=A, b=B)
+            for (A,B) in zip(raw_expected[[:a]], raw_expected[[:b]])
+        ])
+        isequal(actual_set, expected_set)
+    end 
+end
+
 
 # Source Data
 const simple_test_body = JSON3.read("""
@@ -98,6 +139,23 @@ const struct_body = JSON3.read(test_body_str, MainBody)
         EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> first,
         (a=(b=1,c=2), d=4)
     )
+
+    heterogenous_level_test_body = Dict(
+        :data => [
+            Dict(:E => 8),
+            5
+            ]
+        )
+    # TODO consider returning a column that still contians nested data when we hit A
+    # heterogenous array. Which would return something like:
+    # expected_het_test = (data=[Dict(:E => 8),5],)
+    @test_throws ArgumentError EN.expand(heterogenous_level_test_body)
+
+    empty_dict_field = Dict(
+        :a => Dict(),
+        :b => 5
+    )
+    @test fieldsequal(EN.expand(empty_dict_field), (b = [5],))
 end
 
 

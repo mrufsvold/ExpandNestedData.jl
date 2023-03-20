@@ -22,7 +22,7 @@ function expand(data; flatten_arrays::Bool = false, default_value = missing, laz
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns)
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    return ExpandedTable(columns, column_names, lazy_columns, pool_arrays, column_style)
+    return ExpandedTable(columns, column_names; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style)
 end
 
 
@@ -31,15 +31,15 @@ process_node(data::T; kwargs...) where T = process_node(StructTypes.StructType(T
 
 
 # Make a new column when you get to the bottom of the nested objects
-function process_node(::Any, data; kwargs...)
-    value = data isa AbstractArray && length(data) == 0 && kwargs[:flatten_arrays] ?
+function process_node(::Any, data::T; kwargs...) where T
+    value = T <: AbstractArray && length(data) == 0 && kwargs[:flatten_arrays] ?
         kwargs[:default_value] :
         data
     init_column_set(value, kwargs[:flatten_arrays])
 end
 
 # If we get an array type, check if it should be expanded further or if it should be the seed of a new column
-function process_node(data::AbstractArray{T}; kwargs...) where {T}
+function process_node(data::AbstractArray; kwargs...)
     if length(data) > 0 && (kwargs[:flatten_arrays] || has_namevaluecontainer_element(data))
         return process_node(StructTypes.ArrayType(), data; kwargs...)
     end
@@ -48,8 +48,8 @@ function process_node(data::AbstractArray{T}; kwargs...) where {T}
 end
 
 
-# handle unpacking arraylike objects
-function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
+# handle unpacking array-like objects
+function process_node(::ArrayLike, data; kwargs...) where ArrayLike <: StructTypes.ArrayType
     if length(data) == 0
         return columnset(NestedIterator(kwargs[:default_value]))
     elseif  length(data) == 1
@@ -59,9 +59,10 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
     all_column_sets = process_node.(data; kwargs...)
 
     unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
-
     column_set = ColumnSet()
     for name in unique_names
+        # For each unique column name, get that column for the results of processing each element
+        # in this array, and then stack them all
         column_set[name] = all_column_sets         .|>
             (col_set -> get_column(col_set, name, kwargs[:default_value]))  |>
             (cols -> foldl(stack, cols))
@@ -70,22 +71,31 @@ function process_node(::A, data; kwargs...) where A <: StructTypes.ArrayType
 end
 
 
-# Handle a name-value pair object
-function process_node(::D, data; kwargs...) where D <: NameValueContainer
+# Handle a name-value pair object (dict or struct)
+function process_node(::DictOrStruct, data; kwargs...) where DictOrStruct <: NameValueContainer
     columns = ColumnSet()
-    multiplier = 1
+    multiplier = Ref{Int}(1)
     for (child_name, child_data) in get_pairs(data)
+        curr_mult = multiplier[]
         # Collect columns from the child's data
         child_columns = process_node(child_data; kwargs...)
-        # Add the child's name to the key of all columns
-        prepend_name!(child_columns, child_name)
-        # Need to repeat each value for all of the values of the previous children
-        # to make a product of values
-        repeat_each!.(values(child_columns), multiplier)
-        multiplier *= column_length(child_columns)
-        merge!(columns, child_columns)
+        
+        if length(child_columns) > 0
+            # Add the child's name to the key of all columns
+            prepend_name!(child_columns, child_name)
+            # Need to repeat each value for all of the values of the previous children
+            # to make a product of values
+            match_len_child_cols = Dict(
+                key => repeat_each(col, curr_mult)
+                for (key, col) in child_columns
+            )
+            multiplier[] = curr_mult * column_length(child_columns)
+            merge!(columns, match_len_child_cols)
+        end
     end
-    # catch up short columns with the total length for this group
-    cycle_columns_to_length!(columns)
+    if length(columns) > 0
+        # catch up short columns with the total length for this group
+        cycle_columns_to_length!(columns)
+    end
     return columns
 end
