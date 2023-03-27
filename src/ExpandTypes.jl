@@ -183,8 +183,8 @@ ColumnDefs = Vector{ColumnDefinition}
 ## Returns
 `::ColumnDefinition`
 """
-function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
-    column_name = column_name isa Nothing ? join_names(field_path) : column_name
+function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false, name_join_pattern = "_")
+    column_name = column_name isa Nothing ? join_names(field_path, name_join_pattern) : column_name
     ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool)
