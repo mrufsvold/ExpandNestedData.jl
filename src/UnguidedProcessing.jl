@@ -14,15 +14,16 @@ Take a nested data structure, `data` and convert it into a `Table`
 * `column_names::Dict{Vector{Symbol}, Symbol}`: Provide a mapping of key/fieldname paths to replaced column names
 * `column_style`: Choose returned column style from `nested_columns` or `flat_columns`. If nested, `column_names` are ignored and a 
     TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `flat_columns`
+* `name_join_pattern::String`: The separator for joining field paths into column names. Default: "_"
 
 ## Returns
 `::NamedTuple`: A Tables.jl compliant Tuple of Vectors
 """
 function expand(data; flatten_arrays::Bool = false, default_value = missing, lazy_columns::Bool = false,
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
-        column_style::ColumnStyle=flat_columns)
+        column_style::ColumnStyle=flat_columns, name_join_pattern = "_")
     columns = process_node(data; flatten_arrays=flatten_arrays, default_value=default_value)
-    return ExpandedTable(columns, column_names; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style)
+    return ExpandedTable(columns, column_names; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style, name_join_pattern=name_join_pattern)
 end
 
 

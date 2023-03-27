@@ -163,15 +163,27 @@ end
     columns_defs = [
         EN.ColumnDefinition([:d]),
         EN.ColumnDefinition([:a, :b]; flatten_arrays=true),
-        EN.ColumnDefinition([:a, :c]),
+        EN.ColumnDefinition([:a, :c]; name_join_pattern = "?_#"),
         EN.ColumnDefinition([:e, :f]; default_value="Missing branch")
         ]
-    expected_table = (d=[4,4,4,4,4], a_b=[1,2,3,4, missing], a_c=[2,missing,1,1, missing], 
-        e_f = repeat(["Missing branch"], 5)
+    expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
+        :e_f => repeat(["Missing branch"], 5))
     )
     @test fieldsequal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
         EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> first, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
+end
+
+@testset "superficial options" begin
+    # Expanding Arrays
+    actual_expanded_table = EN.expand(test_body; flatten_arrays=true, name_join_pattern = "?_#")
+    @test begin
+        expected_table_expanded = NamedTuple((
+            Symbol("a?_#b")=>[1,2,3,4,missing], 
+            Symbol("a?_#c")=>[2,missing,1,1, missing], 
+            :d=>[4,4,4,4,4]))
+        fieldsequal(actual_expanded_table, expected_table_expanded)
+    end
 end

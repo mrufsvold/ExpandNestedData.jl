@@ -176,20 +176,20 @@ ColumnDefs = Vector{ColumnDefinition}
 
 ## Keyword Args
 * `column_name::Symbol`: A name for the resulting column. If `nothing`, defaults to joining the field_path with snake_case_format.
-* `flatten_arrays`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
+* `flatten_arrays::Bool`: When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`
 * `default_value`: When the field_path keys do not exist on one or more branches, fill with this value. Default: `missing`
-* `pool_arrays`: When collecting values for this column, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
-
+* `pool_arrays::Bool`: When collecting values for this column, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
+* `name_join_pattern::String`: The separator for joining field paths into column names. Default: "_"
 ## Returns
 `::ColumnDefinition`
 """
-function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false, name_join_pattern = "_")
+function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false, name_join_pattern:String = "_")
     column_name = column_name isa Nothing ? join_names(field_path, name_join_pattern) : column_name
     ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
 end
-function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool)
+function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
-    ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays)
+    ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
 end
 # Accessors
 field_path(c::ColumnDefinition) = c.field_path
