@@ -28,11 +28,11 @@ end
 
 """Construct an ExpandedTable from the results of `expand`"""
 function ExpandedTable(columns::Dict{Vector, T}, col_defs; lazy_columns=false, pool_arrays=false, column_style=flat_columns, name_join_pattern = "_") where {T<: NestedIterator{<:Any}}
-    sym_key_columns = Dict(
+    sym_key_columns = Dict{Vector{Symbol}, T}(
         Symbol.(k) => v 
         for (k, v) in pairs(columns)
     )
-    return ExpandedTable(sym_key_columns, col_defs; lazy_columns =lazy_columns, pool_arrays=pool_arrays, column_style = column_style, name_join_pattern)
+    return ExpandedTable(sym_key_columns, col_defs; lazy_columns = lazy_columns, pool_arrays=pool_arrays, column_style = column_style, name_join_pattern)
 end
 function ExpandedTable(columns::Dict{Vector{Symbol}, T}, column_names::Dict; lazy_columns=false, pool_arrays=false, column_style=flat_columns, name_join_pattern = "_") where {T<: NestedIterator{<:Any}}
     paths = keys(columns)

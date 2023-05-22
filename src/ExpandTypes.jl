@@ -5,8 +5,10 @@
 contents without worrying about `getkey` or `getproperty`, etc.
 """
 NameValueContainer = Union{StructTypes.DictType, StructTypes.DataType}
+Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayType}
 
 is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
+is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 
 """Check if any elements in an iterator are subtypes of NameValueContainer"""
 function has_namevaluecontainer_element(itr)
@@ -32,6 +34,9 @@ get_value(x::T, name) where T = get_value(StructTypes.StructType(T), x, name)
 get_value(::StructTypes.DataType, x, name) = getproperty(x, name)
 get_value(::StructTypes.DictType, x, name) = x[name]
 
+get_value(x::T, name, default) where T = get_value(StructTypes.StructType(T), x, name, default)
+get_value(::StructTypes.DataType, x, name, default) = hasproperty(x, name) ? getproperty(x, name) : default
+get_value(::StructTypes.DictType, x, name, default) = get(x, name, default)
 
 ##### NestedIterator #####
 ##########################
@@ -116,16 +121,16 @@ end
 
 
 """
-NestedIterator(data, flatten_arrays=true)
+    NestedIterator(data; total_length=nothing)
+
 Construct a new NestedIterator seeded with the value data
 # Args
 data::Any: seed value
-flatten_arrays::Bool: if data is an array, flatten_arrays==false will treat the array as a single value when 
-    cycling the columns values
+total_length::Int: Cycle the values to reach total_length (must be even divisible by the length of `data`)
 """
-function NestedIterator(data::T; flatten_arrays=false, total_length=nothing, default_value=missing) where T
-    value = if flatten_arrays && T <: AbstractArray
-        length(data) >= 1 ? data : [default_value]
+function NestedIterator(data::T; total_length=nothing, default_value=missing) where T
+    value = if T <: AbstractArray
+        length(data) == 0 ? [default_value] : data
     else
         [data]
     end
@@ -160,7 +165,6 @@ struct ColumnDefinition
     path_index::Int64
     # name of this column in the table once expanded
     column_name::Symbol
-    flatten_arrays::Bool
     default_value
     pool_arrays::Bool
 end
@@ -183,9 +187,9 @@ ColumnDefs = Vector{ColumnDefinition}
 ## Returns
 `::ColumnDefinition`
 """
-function ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
+function ColumnDefinition(field_path; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
     column_name = column_name isa Nothing ? join_names(field_path, name_join_pattern) : column_name
-    ColumnDefinition(field_path, 1, column_name, flatten_arrays, default_value, pool_arrays)
+    ColumnDefinition(field_path, 1, column_name, default_value, pool_arrays)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
@@ -196,7 +200,6 @@ field_path(c::ColumnDefinition) = c.field_path
 column_name(c::ColumnDefinition) = c.column_name
 default_value(c::ColumnDefinition) = c.default_value
 pool_arrays(c::ColumnDefinition) = c.pool_arrays
-flatten_arrays(c::ColumnDefinition) = c.flatten_arrays
 path_index(c::ColumnDefinition) = c.path_index
 function current_path_name(c::ColumnDefinition)
     fp = field_path(c)
@@ -228,7 +231,6 @@ function make_column_def_child_copies(column_defs::ColumnDefs, name)
             field_path(def),
             path_index(def) + 1,
             column_name(def),
-            flatten_arrays(def),
             default_value(def),
             pool_arrays(def)
         ))
@@ -241,7 +243,7 @@ end
 # Convenience alias for a dictionary of columns
 ColumnSet = Dict{Vector, NestedIterator} 
 columnset(col) = ColumnSet([] => col)
-init_column_set(data, flatten_arrays=true) = columnset(NestedIterator(data; flatten_arrays))
+init_column_set(data) = columnset(NestedIterator(data))
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
 prepend_name!(cols, name) = cols |> keys .|> (k-> pushfirst!(k, name))

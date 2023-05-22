@@ -11,7 +11,6 @@ join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Sy
 
 include("ExpandTypes.jl")
 include("ExpandedTable.jl")
-include("UnguidedProcessing.jl")
-include("ConfiguredProcessing.jl")
+include("Processing.jl")
 
 end

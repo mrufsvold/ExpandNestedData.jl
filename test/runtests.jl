@@ -23,26 +23,26 @@ function fieldsequal(o1, o2)
 end
 
 @testset "Internals" begin
-    iter1 = ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true)
+    iter1 = ExpandNestedData.NestedIterator([1,2])
     @test [1,2] == collect(iter1)
     @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1, 2))
     @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
     @test [1,2,1,2] == collect(ExpandNestedData.stack(iter1, iter1))
     col_set = ExpandNestedData.ColumnSet(
-        [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
-        [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+        [:a] => ExpandNestedData.NestedIterator([1,2]),
+        [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
     )
     @test isequal(
             ExpandNestedData.cycle_columns_to_length!(col_set),
             ExpandNestedData.ColumnSet(
-                [:a] => ExpandNestedData.NestedIterator([1,2,1,2]; flatten_arrays = true),
-                [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+                [:a] => ExpandNestedData.NestedIterator([1,2,1,2]),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
             )
         )
 
     col_set = ExpandNestedData.ColumnSet(
-            [:a] => ExpandNestedData.NestedIterator([1,2]; flatten_arrays = true),
-            [:b] => ExpandNestedData.NestedIterator([3,4,5,6]; flatten_arrays = true),
+            [:a] => ExpandNestedData.NestedIterator([1,2]),
+            [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
         )
 
     @test begin
@@ -52,8 +52,8 @@ end
             for (A,B) in zip(raw_actual[[:a]], raw_actual[[:b]])
         ])
         raw_expected = ExpandNestedData.ColumnSet(
-                [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]; flatten_arrays = true),
-                [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]; flatten_arrays = true),
+                [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]),
+                [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]),
             )
         expected_set = Set([
             (a=A, b=B)
@@ -101,25 +101,13 @@ const struct_body = JSON3.read(test_body_str, MainBody)
     @test eltype(actual_simple_table.data_D) == Int64
 
     # Expanding Arrays
-    actual_expanded_table = EN.expand(test_body; flatten_arrays=true)
+    actual_expanded_table = EN.expand(test_body)
     @test begin
         expected_table_expanded = (
             a_b=[1,2,3,4,missing], 
             a_c=[2,missing,1,1, missing], 
             d=[4,4,4,4,4])
         fieldsequal(actual_expanded_table, expected_table_expanded)
-    end
-
-    # Unexpanded Arrays
-    @test begin
-        expected_table = (
-            Column_B=[1,2,[3,4],[]], 
-            a_c=[2, missing,1, missing], 
-            d=[4,4,4,4])
-        name_map = Dict([:a, :b] => :Column_B)
-        fieldsequal(
-            EN.expand(test_body; flatten_arrays=false, column_names = name_map), 
-            expected_table)
     end
 
     # Using struct of struct as input
@@ -129,7 +117,7 @@ const struct_body = JSON3.read(test_body_str, MainBody)
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
         fieldsequal(
-            EN.expand(struct_body; flatten_arrays=true, default_value=nothing), 
+            EN.expand(struct_body; default_value=nothing), 
             expected_table_expanded)
     end
     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
@@ -162,7 +150,7 @@ end
 @testset "Configured Expand" begin
     columns_defs = [
         EN.ColumnDefinition([:d]),
-        EN.ColumnDefinition([:a, :b]; flatten_arrays=true),
+        EN.ColumnDefinition([:a, :b]),
         EN.ColumnDefinition([:a, :c]; name_join_pattern = "?_#"),
         EN.ColumnDefinition([:e, :f]; default_value="Missing branch")
         ]
@@ -178,7 +166,7 @@ end
 
 @testset "superficial options" begin
     # Expanding Arrays
-    actual_expanded_table = EN.expand(test_body; flatten_arrays=true, name_join_pattern = "?_#")
+    actual_expanded_table = EN.expand(test_body; name_join_pattern = "?_#")
     @test begin
         expected_table_expanded = NamedTuple((
             Symbol("a?_#b")=>[1,2,3,4,missing], 
