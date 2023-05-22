@@ -10,16 +10,16 @@ function expand(data, column_defs=nothing; default_value = missing, lazy_columns
 end
 
 # Dispatch processing of an object to the correct version of process node using StructType
-function process_node(data::T, col_defs; kwargs...) where T
+function process_node(data::T, col_defs, depth=1; kwargs...) where T
     struct_type = StructTypes.StructType(T)
     if typeof(struct_type) <: Container
-        return process_node(StructTypes.StructType(T), data, col_defs; kwargs...)
+        return process_node(StructTypes.StructType(T), data, col_defs, depth; kwargs...)
     end
-    return init_column_set(data)
+    return init_column_set(data, depth-1)
 end
 
 # Unpack a name-value pair object
-function process_node(::DictOrStruct, data, col_defs::C; kwargs...) where {DictOrStruct <: NameValueContainer, C}
+function process_node(::DictOrStruct, data, col_defs::C, depth; kwargs...) where {DictOrStruct <: NameValueContainer, C}
     columns = ColumnSet()
     multiplier = 1
     col_defs_provided = !(C <: Nothing)
@@ -41,7 +41,7 @@ function process_node(::DictOrStruct, data, col_defs::C; kwargs...) where {DictO
 
         # CASE 1: Expect a child node and find one, unpack it (captures all unguided)
         child_columns = if should_have_child && data_has_name
-            process_node(child_data, child_col_defs; kwargs...)
+            process_node(child_data, child_col_defs, depth+1; kwargs...)
         # CASE 2: Expected a child node, but don't find it 
         elseif should_have_child && !data_has_name
             make_missing_column_set(child_col_defs, path_index(first(col_defs)))
@@ -49,12 +49,12 @@ function process_node(::DictOrStruct, data, col_defs::C; kwargs...) where {DictO
         elseif !should_have_child
             col_def = first(child_col_defs)
             new_column = NestedIterator(get_value(data, name, default_value(col_def)); default_value=default_value(col_def))
-            columnset(new_column)
+            columnset(new_column, depth)
         end
         
         if length(child_columns) > 0
             # make_missing_column_set already has the full path, so skip prepend
-            data_has_name && prepend_name!(child_columns, name)
+            prepend_name!(child_columns, name, depth)
             
             # Need to repeat each value for all of the values of the previous children
             # to make a product of values
@@ -75,20 +75,20 @@ end
 
 
 # handle unpacking array-like objects
-function process_node(::ArrayLike, data, col_defs::C; kwargs...) where {ArrayLike <: StructTypes.ArrayType, C}
+function process_node(::ArrayLike, data, col_defs::C, depth; kwargs...) where {ArrayLike <: StructTypes.ArrayType, C}
     # todo -- if the data is an array, we could check eltype and skip unpacking (just make a nested iter)
 
     if length(data) == 0
         # If we have column defs, but the array is empty, that means we need to make a missing column_set
         columns = !(C <: Nothing) ?
             make_missing_column_set(col_defs, (col_defs |> first |> path_index)) :
-            columnset(NestedIterator(kwargs[:default_value]))
+            columnset(NestedIterator(kwargs[:default_value]), depth-1)
         return columns
     elseif  length(data) == 1
-        return process_node(first(data), col_defs; kwargs...)
+        return process_node(first(data), col_defs, depth; kwargs...)
     end
 
-    all_column_sets = process_node.(data, Ref(col_defs); kwargs...)
+    all_column_sets = process_node.(data, Ref(col_defs), depth; kwargs...)
 
     unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
     column_set = ColumnSet()

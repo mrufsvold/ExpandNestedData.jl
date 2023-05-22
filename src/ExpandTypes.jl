@@ -130,23 +130,24 @@ total_length::Int: Cycle the values to reach total_length (must be even divisibl
 """
 function NestedIterator(data::T; total_length=nothing, default_value=missing) where T
     value = if T <: AbstractArray
-        length(data) == 0 ? [default_value] : data
+        length(data) == 0 ? (default_value,) : data
     else
-        [data]
+        (data,)
     end
     len = length(value)
     ncycle = total_length isa Nothing ? 1 : total_length ÷ len
     return _NestedIterator(value, len, ncycle)
 end
 
-function _NestedIterator(value::AbstractArray{T}, len::Int64, ncycle::Int64) where T
+function _NestedIterator(value::T, len::Int64, ncycle::Int64) where T
+    E = eltype(T)
     f = Seed(value)
     is_one = len == 1
-    unique_val = Ref{T}()
+    unique_val = Ref{E}()
     if is_one
-        unique_val[] = first(value)::T
+        unique_val[] = first(value)::E
     end
-    ni = NestedIterator{T}(f, len, T, is_one, unique_val)
+    ni = NestedIterator{E}(f, len, E, is_one, unique_val)
     return cycle(ni, ncycle)
 end
 
@@ -242,11 +243,18 @@ end
 
 # Convenience alias for a dictionary of columns
 ColumnSet = Dict{Vector, NestedIterator} 
-columnset(col) = ColumnSet([] => col)
-init_column_set(data) = columnset(NestedIterator(data))
+columnset(col, depth) = ColumnSet(anys(depth) => col)
+init_column_set(data, depth) = columnset(NestedIterator(data), depth)
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
-prepend_name!(cols, name) = cols |> keys .|> (k-> pushfirst!(k, name))
+function prepend_name!(cols, name, depth)
+    for key in keys(cols)
+        val = pop!(cols, key)
+        key[depth] = name
+        cols[key] = val
+    end
+end
+
 # Check if all the columns in a set are of equal length
 all_equal_length(cols) = cols |> values .|> length |> allequal
 
