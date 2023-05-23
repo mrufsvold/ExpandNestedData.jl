@@ -15,14 +15,22 @@ end
 as the source data"""
 function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
     children_tuple = NamedTuple(
-        Symbol(name(child)) => make_column_tuple(columns, child, lazy_columns::Bool)
+        Symbol(name(child)) => make_column_tuple(columns, child, lazy_columns)
         for child in children(path_graph)
     )
     return Table(children_tuple)
 end
 function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
     lazy_column = columns[field_path(path_graph)]
-    return lazy_columns ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
+    value_column =  lazy_columns ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
+    if length(children(path_graph)) > 0
+        d = Dict(:unnamed => value_column)
+        for child in children(path_graph)
+            d[Symbol(name(child))] = make_column_tuple(columns, child, lazy_columns)
+        end
+        return Table(NamedTuple(d))
+    end
+    return value_column
 end
 
 
@@ -37,9 +45,10 @@ end
 function ExpandedTable(columns::Dict{Vector{Symbol}, T}, column_names::Dict; lazy_columns=false, pool_arrays=false, column_style=flat_columns, name_join_pattern = "_") where {T<: NestedIterator{<:Any}}
     paths = keys(columns)
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
-    return ExpandedTable(columns, col_defs; lazy_columns =lazy_columns, column_style = column_style)
+    return ExpandedTable(columns, col_defs; lazy_columns=lazy_columns, column_style=column_style)
 end
 function ExpandedTable(columns::Dict{Vector{Symbol}, T}, column_defs::ColumnDefs; kwargs...) where {T<: NestedIterator{<:Any}}
+    
     path_graph = make_path_graph(column_defs)
     column_tuple = make_column_tuple(columns, path_graph, kwargs[:lazy_columns])
     col_lookup = Dict(

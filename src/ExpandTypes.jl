@@ -9,6 +9,7 @@ Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayT
 
 is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
+is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
 
 """Check if any elements in an iterator are subtypes of NameValueContainer"""
 function has_namevaluecontainer_element(itr)
@@ -118,6 +119,7 @@ function stack(c1::NestedIterator{T}, c2::NestedIterator{U}) where {T, U}
     NestedIterator(Unstack(length(c1), c1.get_index, c2.get_index), len, type, false, Ref{type}())
 end
 
+stack(c) = c
 
 
 """
@@ -161,9 +163,7 @@ missing_column(default, len=1) = return NestedIterator(default; total_length=len
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
 struct ColumnDefinition
     # Path to values
-    field_path
-    # Index of current level TODO: should be removed and stored externally
-    path_index::Int64
+    field_path::Vector
     # name of this column in the table once expanded
     column_name::Symbol
     default_value
@@ -171,7 +171,6 @@ struct ColumnDefinition
 end
 # Convenience alias
 ColumnDefs = Vector{ColumnDefinition}
-
 
 """
     ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
@@ -189,8 +188,11 @@ ColumnDefs = Vector{ColumnDefinition}
 `::ColumnDefinition`
 """
 function ColumnDefinition(field_path; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
-    column_name = column_name isa Nothing ? join_names(field_path, name_join_pattern) : column_name
-    ColumnDefinition(field_path, 1, column_name, default_value, pool_arrays)
+    if column_name isa Nothing
+        path = last(field_path) == :unnamed ? (@view field_path[1:end-1]) : field_path
+        column_name = join_names(path, name_join_pattern)
+    end
+    ColumnDefinition(field_path, column_name, default_value, pool_arrays)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
@@ -201,11 +203,9 @@ field_path(c::ColumnDefinition) = c.field_path
 column_name(c::ColumnDefinition) = c.column_name
 default_value(c::ColumnDefinition) = c.default_value
 pool_arrays(c::ColumnDefinition) = c.pool_arrays
-path_index(c::ColumnDefinition) = c.path_index
-function current_path_name(c::ColumnDefinition)
+function current_path_name(c::ColumnDefinition, depth)
     fp = field_path(c)
-    i = path_index(c)
-    return fp[i]
+    return fp[depth]
 end
 function path_to_children(c::ColumnDefinition, current_index)
     fp = field_path(c)
@@ -213,28 +213,25 @@ function path_to_children(c::ColumnDefinition, current_index)
 end
 
 
-is_current_name(col_def::ColumnDefinition, name) = current_path_name(col_def) == name
+is_current_name(col_def::ColumnDefinition, name, depth) = current_path_name(col_def, depth) == name
+has_more_keys(col_def, depth) = depth < length(field_path(col_def))
+get_unique_current_names(defs, depth) = unique((current_path_name(def, depth) for def in defs))
+append_name!(def, name) = push!(field_path(def), name)
 
-has_more_keys(col_def) = path_index(col_def) < length(field_path(col_def))
-
-
-function analyze_column_defs(col_defs::ColumnDefs)
-    unique_names = col_defs .|> current_path_name |> unique
-    names_with_children = filter(has_more_keys, col_defs) .|> current_path_name |> unique
+function get_unique_names_and_children(col_defs::ColumnDefs, depth)
+    unique_names = get_unique_current_names(col_defs, depth)
+    names_with_children = get_unique_current_names(
+        (def for def in col_defs if has_more_keys(def, depth)),
+        depth
+        )
     return (unique_names, names_with_children)
 end
 
-# TODO: This is a huge source of unnecessary allocations. We should be storing level outside this struct
-# and passing along the same defs without copying
-function make_column_def_child_copies(column_defs::ColumnDefs, name)
-    return filter((def -> is_current_name(def, name)), column_defs) .|>
-        (def -> ColumnDefinition(
-            field_path(def),
-            path_index(def) + 1,
-            column_name(def),
-            default_value(def),
-            pool_arrays(def)
-        ))
+function make_column_def_child_copies(column_defs::ColumnDefs, name, depth)
+    return filter(
+        def -> is_current_name(def, name, depth) && length(field_path(def)) > depth, 
+        column_defs
+        )
 end
 
 
@@ -247,13 +244,36 @@ columnset(col, depth) = ColumnSet(anys(depth) => col)
 init_column_set(data, depth) = columnset(NestedIterator(data), depth)
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
-function prepend_name!(cols, name, depth)
-    for key in keys(cols)
+function apply_in_place!(cols, f, args...)
+    initial_keys = copy(keys(cols))
+    for key in initial_keys 
         val = pop!(cols, key)
-        key[depth] = name
+        key, val = f(key, val, args...)
         cols[key] = val
     end
 end
+function _prepend_name(key, val, name, depth)
+    key[depth] = name
+    return key, val
+end
+function prepend_name!(cols, name, depth)
+    apply_in_place!(cols, _prepend_name, name, depth)
+end
+
+function _push_name(key, val, name)
+    push!(key, name)
+    return key, val
+end
+function push_name!(cols, name)
+    apply_in_place!(cols, _push_name, name)
+end
+function _repeat_each_column(key, val, n)
+    return key, repeat_each(val, n)
+end
+function repeat_each_column!(cols, n)
+    apply_in_place!(cols,_repeat_each_column, n)
+end
+
 
 # Check if all the columns in a set are of equal length
 all_equal_length(cols) = cols |> values .|> length |> allequal
@@ -319,6 +339,12 @@ function make_missing_column_set(col_defs::ColumnDefs, current_index)
     return missing_column_set
 end
 
+function repeat_each!(column_set::ColumnSet, n)
+    for (k, v) in pairs(column_set)
+        columnset[k] = repeat_each(v, n)
+    end
+end
+
 
 ##### PathGraph #####
 #####################
@@ -337,40 +363,65 @@ end
 
 struct ValueNode <: AbstractValueNode
     name
-    field_path
+    children::Vector{AbstractPathNode}
+    field_path::Vector
     pool_arrays
 end
+ValueNode(name, field_path, pool_arrays) = ValueNode(name, ValueNode[], field_path, pool_arrays)
 
 children(n::AbstractPathNode) = n.children
 name(n::AbstractPathNode) = n.name
 field_path(n::AbstractValueNode) = n.field_path
 pool_arrays(n::AbstractValueNode) = n.pool_arrays
 
-function make_path_nodes(column_defs)
-    unique_names = column_defs .|> current_path_name |> unique
+"""
+SIDE EFFECT: also appends :unnamed to any column defs that stop at a pathnode to capture any
+loose values in an array at that level
+"""
+function make_path_nodes!(column_defs, depth = 1)
+    # todo: cases where we are filtering down to a "current name" might be 
+    # better as some kind of grouping
+    unique_names = get_unique_current_names(column_defs, depth)
     nodes = Vector{AbstractPathNode}(undef, length(unique_names))
     for (i, unique_name) in enumerate(unique_names)
-        matching_defs = filter(p -> current_path_name(p) == unique_name, column_defs)
-        are_value_nodes = matching_defs .|> has_more_keys .|> !
+        matching_defs = filter(p -> current_path_name(p, depth) == unique_name, column_defs)
+        are_value_nodes = [!has_more_keys(def, depth) for def in matching_defs]
+        
+        all_value_nodes = all(are_value_nodes)
+        mix_of_node_types = !all_value_nodes && any(are_value_nodes)
+        # todo turn this into a warning
+        # if mix_of_node_types
+        #     throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_col_defs))"))
+        # end
 
-        if all(are_value_nodes)
+        if all_value_nodes
             # If we got to a value node, there should only be one.
             def = first(matching_defs)
             nodes[i] = ValueNode(unique_name, field_path(def), pool_arrays(def))
             continue
         end
 
-        children_col_defs = make_column_def_child_copies(matching_defs, unique_name)
-        if any(are_value_nodes)
-            throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_col_defs))"))
+        with_children = !mix_of_node_types ? 
+            matching_defs :
+            [def for (is_value, def) in zip(are_value_nodes, matching_defs) if !is_value]
+        children_col_defs = make_column_def_child_copies(with_children, unique_name, depth)
+
+        child_nodes = make_path_nodes!(children_col_defs, depth+1)
+        if mix_of_node_types
+            without_child_idx = findfirst(identity, are_value_nodes)
+            without_child = matching_defs[without_child_idx]
+            value_column_node = ValueNode(:unnamed, [field_path(without_child); :unnamed],pool_arrays(without_child))
+            push!(child_nodes, value_column_node)
+            append_name!(without_child, :unnamed)
         end
-        nodes[i] = PathNode(unique_name, make_path_nodes(children_col_defs))
+
+        nodes[i] = PathNode(unique_name, child_nodes)
     end
     return nodes
 end 
 
 
 """Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(col_defs::ColumnDefs) = TopLevelNode(make_path_nodes(col_defs))
+make_path_graph(col_defs::ColumnDefs) = TopLevelNode(make_path_nodes!(col_defs))
 
 

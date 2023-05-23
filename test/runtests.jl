@@ -95,6 +95,13 @@ struct MainBody
 end
 const struct_body = JSON3.read(test_body_str, MainBody)
 
+const heterogenous_level_test_body = Dict(
+        :data => [
+            Dict(:E => 8),
+            5
+            ]
+        )
+
 @testset "Unguided Expand" begin
     actual_simple_table = EN.expand(simple_test_body)
     @test fieldsequal(actual_simple_table, expected_simple_table)
@@ -128,16 +135,9 @@ const struct_body = JSON3.read(test_body_str, MainBody)
         (a=(b=1,c=2), d=4)
     )
 
-    heterogenous_level_test_body = Dict(
-        :data => [
-            Dict(:E => 8),
-            5
-            ]
-        )
-    # TODO consider returning a column that still contians nested data when we hit A
-    # heterogenous array. Which would return something like:
-    # expected_het_test = (data=[Dict(:E => 8),5],)
-    @test_throws ArgumentError EN.expand(heterogenous_level_test_body)
+    
+    @show EN.expand(heterogenous_level_test_body)
+    @test fieldsequal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 
     empty_dict_field = Dict(
         :a => Dict(),
@@ -162,6 +162,12 @@ end
         EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> first, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
+    columns_defs = [
+        EN.ColumnDefinition([:data]),
+        EN.ColumnDefinition([:data, :E])
+    ]
+    @test fieldsequal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+
 end
 
 @testset "superficial options" begin

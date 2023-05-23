@@ -26,14 +26,14 @@ function process_node(::DictOrStruct, data, col_defs::C, depth; kwargs...) where
     data_names = get_names(data)
 
     (required_names, names_with_children) = if col_defs_provided
-        analyze_column_defs(col_defs)
+        get_unique_names_and_children(col_defs, depth)
     else
         (data_names, data_names)
     end
 
     for name in required_names
         # This creates a copy of configured columns to pass down
-        child_col_defs = col_defs_provided ? make_column_def_child_copies(col_defs, name) : nothing
+        child_col_defs = col_defs_provided ? make_column_def_child_copies(col_defs, name, depth) : nothing
         # both are always true when unguided
         should_have_child = name in names_with_children
         data_has_name = name in data_names
@@ -44,26 +44,29 @@ function process_node(::DictOrStruct, data, col_defs::C, depth; kwargs...) where
             process_node(child_data, child_col_defs, depth+1; kwargs...)
         # CASE 2: Expected a child node, but don't find it 
         elseif should_have_child && !data_has_name
-            make_missing_column_set(child_col_defs, path_index(first(col_defs)))
+            make_missing_column_set(child_col_defs, depth)
         # CASE 3: We don't expect a child node: wrap any value in a new column
         elseif !should_have_child
-            col_def = first(child_col_defs)
-            new_column = NestedIterator(get_value(data, name, default_value(col_def)); default_value=default_value(col_def))
+            col_idx = findfirst(def -> current_path_name(def, depth)==name, col_defs)
+            default = default_value(col_defs[col_idx])
+            new_column = NestedIterator(
+                get_value(data, name, default); 
+                default_value=default
+                )
             columnset(new_column, depth)
         end
         
         if length(child_columns) > 0
             # make_missing_column_set already has the full path, so skip prepend
-            prepend_name!(child_columns, name, depth)
+            if data_has_name || !should_have_child 
+                prepend_name!(child_columns, name, depth)
+            end
             
             # Need to repeat each value for all of the values of the previous children
             # to make a product of values
-            match_len_child_cols = Dict(
-                key => repeat_each(col, multiplier)
-                for (key, col) in child_columns
-            )
-            multiplier *= column_length(match_len_child_cols)
-            merge!(columns, match_len_child_cols)
+            repeat_each_column!(child_columns, multiplier)
+            multiplier *= column_length(child_columns)
+            merge!(columns, child_columns)
         end
     end
     if length(columns) > 0
@@ -75,21 +78,31 @@ end
 
 
 # handle unpacking array-like objects
-function process_node(::ArrayLike, data, col_defs::C, depth; kwargs...) where {ArrayLike <: StructTypes.ArrayType, C}
-    # todo -- if the data is an array, we could check eltype and skip unpacking (just make a nested iter)
-
-    if length(data) == 0
+function process_node(::ArrayLike, data::A, col_defs::C, depth; kwargs...) where {ArrayLike <: StructTypes.ArrayType, A, C}
+    element_count = length(data)
+    if element_count == 0
         # If we have column defs, but the array is empty, that means we need to make a missing column_set
         columns = !(C <: Nothing) ?
-            make_missing_column_set(col_defs, (col_defs |> first |> path_index)) :
+            make_missing_column_set(col_defs, depth) :
             columnset(NestedIterator(kwargs[:default_value]), depth-1)
-        return columns
-    elseif  length(data) == 1
+            return columns
+    elseif  element_count == 1
         return process_node(first(data), col_defs, depth; kwargs...)
+    elseif is_value_type(eltype(A))
+        return init_column_set(data, depth-1)
     end
 
-    all_column_sets = process_node.(data, Ref(col_defs), depth; kwargs...)
+    is_value_flag = [!is_container(v) for v in data]
+    
+    if all(is_value_flag)
+        return init_column_set(data, depth-1)
+    end
 
+    containers = (v for (f, v) in zip(is_value_flag, data) if !f)
+
+    all_column_sets = process_node.(containers, Ref(col_defs), depth; kwargs...)
+    
+    # Stack all containers
     unique_names = all_column_sets .|> keys |> Iterators.flatten |> unique
     column_set = ColumnSet()
     for name in unique_names
@@ -99,6 +112,17 @@ function process_node(::ArrayLike, data, col_defs::C, depth; kwargs...) where {A
             (col_set -> get_column(col_set, name, kwargs[:default_value]))  |>
             (cols -> foldl(stack, cols))
     end
+    
+    if !any(is_value_flag)
+        return column_set
+    end
+
+    value_elements = [v for (f,v) in zip(is_value_flag, data) if f]
+    values_column = init_column_set(value_elements, depth)
+    prepend_name!(values_column, :unnamed, depth)
+    repeat_each_column!(values_column, column_length(column_set))
+    merge!(column_set, values_column)
+    cycle_columns_to_length!(column_set)
     return column_set
 end
 
