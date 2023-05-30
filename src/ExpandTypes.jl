@@ -130,14 +130,14 @@ Construct a new NestedIterator seeded with the value data
 data::Any: seed value
 total_length::Int: Cycle the values to reach total_length (must be even divisible by the length of `data`)
 """
-function NestedIterator(data::T; total_length=nothing, default_value=missing) where T
+function NestedIterator(data::T; total_length::Int=0, default_value=missing) where T
     value = if T <: AbstractArray
         length(data) == 0 ? (default_value,) : data
     else
         (data,)
     end
     len = length(value)
-    ncycle = total_length isa Nothing ? 1 : total_length ÷ len
+    ncycle = total_length < 1 ? 1 : total_length ÷ len
     return _NestedIterator(value, len, ncycle)
 end
 
@@ -242,6 +242,11 @@ end
 ColumnSet = Dict{Vector, NestedIterator} 
 columnset(col, depth) = ColumnSet(anys(depth) => col)
 init_column_set(data, depth) = columnset(NestedIterator(data), depth)
+function init_column_set(data, name, depth)
+    col_set = init_column_set(data, depth)
+    prepend_name!(col_set, name, depth)
+    return col_set
+end
 column_length(cols) = cols |> values |> first |> length 
 # Add a name to the front of all names in a set of columns
 function apply_in_place!(cols, f, args...)
@@ -285,7 +290,9 @@ Get a column from a set with a given name, if no column with that name is found
 construct a new column with same length as column set
 """
 get_column(cols::ColumnSet, name, default=missing) = name in keys(cols) ? cols[name] : NestedIterator(default; total_length = column_length(cols))
-
+# todo this assumse that default column divible into the length of the main column. that only works
+# for length 1... so we should probably test this at the top
+get_column(cols::ColumnSet, name, default::NestedIterator) = name in keys(cols) ? cols[name] : cycle(default, column_length(cols) ÷ length(default))
 
 """
 column_set_product!(cols::ColumnSet)
