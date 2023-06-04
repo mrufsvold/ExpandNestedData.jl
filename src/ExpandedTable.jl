@@ -6,7 +6,7 @@ using TypedTables
 
 
 struct ExpandedTable
-    col_lookup::Dict{Symbol, Vector} # Name of column => path into nested data
+    col_lookup::Dict{Symbol, Tuple} # Name of column => path into nested data
     columns # TypedTable, nested in the same pattern as src_data
 end
 
@@ -14,10 +14,12 @@ end
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
 function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
-    children_tuple = NamedTuple(
-        Symbol(name(child)) => make_column_tuple(columns, child, lazy_columns)
-        for child in children(path_graph)
-    )
+    kvs = []
+    for child in children(path_graph)
+        push!(kvs, Symbol(name(child)) => make_column_tuple(columns, child, lazy_columns))
+    end
+
+    children_tuple = NamedTuple(kvs)
     return Table(children_tuple)
 end
 function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
@@ -35,29 +37,20 @@ end
 
 
 """Construct an ExpandedTable from the results of `expand`"""
-function ExpandedTable(columns::Dict{Vector, T}, col_defs; lazy_columns=false, pool_arrays=false, column_style=flat_columns, name_join_pattern = "_") where {T<: NestedIterator{<:Any}}
-    sym_key_columns = Dict{Vector{Symbol}, T}(
-        Symbol.(k) => v 
-        for (k, v) in pairs(columns)
-    )
-    return ExpandedTable(sym_key_columns, col_defs; lazy_columns = lazy_columns, pool_arrays=pool_arrays, column_style = column_style, name_join_pattern)
-end
-function ExpandedTable(columns::Dict{Vector{Symbol}, T}, column_names::Dict; lazy_columns=false, pool_arrays=false, column_style=flat_columns, name_join_pattern = "_") where {T<: NestedIterator{<:Any}}
+function ExpandedTable(columns, column_names::Dict; name_join_pattern, pool_arrays, kwargs...)
     paths = keys(columns)
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
-    return ExpandedTable(columns, col_defs; lazy_columns=lazy_columns, column_style=column_style)
+    return ExpandedTable(columns, col_defs; kwargs...)
 end
-function ExpandedTable(columns::Dict{Vector{Symbol}, T}, column_defs::ColumnDefs; kwargs...) where {T<: NestedIterator{<:Any}}
-    
+function ExpandedTable(columns::Dict{K, T}, column_defs::ColumnDefs; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
     path_graph = make_path_graph(column_defs)
-    column_tuple = make_column_tuple(columns, path_graph, kwargs[:lazy_columns])
+    column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
         column_name(def) => field_path(def)
         for def in column_defs
     )
     expanded_table = ExpandedTable(col_lookup, column_tuple)
     
-    column_style = kwargs[:column_style]
     if column_style == flat_columns
         return as_flat_table(expanded_table)
     elseif column_style == nested_columns

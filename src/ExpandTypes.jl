@@ -31,6 +31,7 @@ get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
 get_names(::StructTypes.DataType, x::T) where T = (n for n in fieldnames(T))
 get_names(::StructTypes.DictType, x) = keys(x)
 
+
 get_value(x::T, name) where T = get_value(StructTypes.StructType(T), x, name)
 get_value(::StructTypes.DataType, x, name) = getproperty(x, name)
 get_value(::StructTypes.DictType, x, name) = x[name]
@@ -161,13 +162,13 @@ missing_column(default, len=1) = return NestedIterator(default; total_length=len
 ############################
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
-struct ColumnDefinition
+mutable struct ColumnDefinition
     # Path to values
-    field_path::Vector
+    field_path::Tuple
     # name of this column in the table once expanded
-    column_name::Symbol
-    default_value
-    pool_arrays::Bool
+    const column_name::Symbol
+    const default_value
+    const pool_arrays::Bool
 end
 # Convenience alias
 ColumnDefs = Vector{ColumnDefinition}
@@ -189,7 +190,7 @@ ColumnDefs = Vector{ColumnDefinition}
 """
 function ColumnDefinition(field_path; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
     if column_name isa Nothing
-        path = last(field_path) == :unnamed ? (@view field_path[1:end-1]) : field_path
+        path = last(field_path) == :unnamed ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
@@ -216,7 +217,11 @@ end
 is_current_name(col_def::ColumnDefinition, name, depth) = current_path_name(col_def, depth) == name
 has_more_keys(col_def, depth) = depth < length(field_path(col_def))
 get_unique_current_names(defs, depth) = unique((current_path_name(def, depth) for def in defs))
-append_name!(def, name) = push!(field_path(def), name)
+function append_name!(def, name)
+    new_field_path = tuple(field_path(def)..., name)
+    def.field_path = new_field_path
+    return def
+end
 
 function get_unique_names_and_children(col_defs::ColumnDefs, depth)
     unique_names = get_unique_current_names(col_defs, depth)
@@ -239,8 +244,8 @@ end
 #####################
 
 # Convenience alias for a dictionary of columns
-ColumnSet = Dict{Vector, NestedIterator} 
-columnset(col, depth) = ColumnSet(anys(depth) => col)
+ColumnSet = Dict{Tuple, NestedIterator} 
+columnset(col, depth) = ColumnSet(Tuple(() for _ in 1:depth) => col)
 init_column_set(data, depth) = columnset(NestedIterator(data), depth)
 function init_column_set(data, name, depth)
     col_set = init_column_set(data, depth)
@@ -258,20 +263,14 @@ function apply_in_place!(cols, f, args...)
     end
 end
 function _prepend_name(key, val, name, depth)
-    key[depth] = name
-    return key, val
+    new_key = Tuple(i==depth ? name : k for (i,k) in enumerate(key))
+    return new_key, val
 end
 function prepend_name!(cols, name, depth)
+    depth < 1 && return nothing
     apply_in_place!(cols, _prepend_name, name, depth)
 end
 
-function _push_name(key, val, name)
-    push!(key, name)
-    return key, val
-end
-function push_name!(cols, name)
-    apply_in_place!(cols, _push_name, name)
-end
 function _repeat_each_column(key, val, n)
     return key, repeat_each(val, n)
 end
@@ -371,7 +370,7 @@ end
 struct ValueNode <: AbstractValueNode
     name
     children::Vector{AbstractPathNode}
-    field_path::Vector
+    field_path::Tuple
     pool_arrays
 end
 ValueNode(name, field_path, pool_arrays) = ValueNode(name, ValueNode[], field_path, pool_arrays)
@@ -417,7 +416,7 @@ function make_path_nodes!(column_defs, depth = 1)
         if mix_of_node_types
             without_child_idx = findfirst(identity, are_value_nodes)
             without_child = matching_defs[without_child_idx]
-            value_column_node = ValueNode(:unnamed, [field_path(without_child); :unnamed],pool_arrays(without_child))
+            value_column_node = ValueNode(:unnamed, (field_path(without_child)..., :unnamed),pool_arrays(without_child))
             push!(child_nodes, value_column_node)
             append_name!(without_child, :unnamed)
         end
