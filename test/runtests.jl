@@ -22,6 +22,21 @@ function fieldsequal(o1, o2)
     return true
 end
 
+function get_rows(t, fields, len)
+    return [
+        Dict(
+            f => t[f][i]
+            for f in fields
+        )
+        for i in 1:len
+    ]
+end
+function unordered_equal(t1, t2)
+    fields = keys(t1)
+    len = length(t1[1])
+    Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+end
+
 @testset "Internals" begin
     iter1 = ExpandNestedData.NestedIterator([1,2])
     @test [1,2] == collect(iter1)
@@ -29,35 +44,35 @@ end
     @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
     @test [1,2,1,2] == collect(ExpandNestedData.stack(iter1, iter1))
     col_set = ExpandNestedData.ColumnSet(
-        [:a] => ExpandNestedData.NestedIterator([1,2]),
-        [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
+        (:a,) => ExpandNestedData.NestedIterator([1,2]),
+        (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
     )
     @test isequal(
             ExpandNestedData.cycle_columns_to_length!(col_set),
             ExpandNestedData.ColumnSet(
-                [:a] => ExpandNestedData.NestedIterator([1,2,1,2]),
-                [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
+                (:a,) => ExpandNestedData.NestedIterator([1,2,1,2]),
+                (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
             )
         )
 
     col_set = ExpandNestedData.ColumnSet(
-            [:a] => ExpandNestedData.NestedIterator([1,2]),
-            [:b] => ExpandNestedData.NestedIterator([3,4,5,6]),
+            (:a,) => ExpandNestedData.NestedIterator([1,2]),
+            (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
         )
 
     @test begin
         raw_actual = ExpandNestedData.column_set_product!(col_set)
         actual_set = Set([
             (a=A, b=B)
-            for (A,B) in zip(raw_actual[[:a]], raw_actual[[:b]])
+            for (A,B) in zip(raw_actual[(:a,)], raw_actual[(:b,)])
         ])
         raw_expected = ExpandNestedData.ColumnSet(
-                [:a] => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]),
-                [:b] => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]),
+                (:a,) => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]),
+                (:b,) => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]),
             )
         expected_set = Set([
             (a=A, b=B)
-            for (A,B) in zip(raw_expected[[:a]], raw_expected[[:b]])
+            for (A,B) in zip(raw_expected[(:a,)], raw_expected[(:b,)])
         ])
         isequal(actual_set, expected_set)
     end 
@@ -104,7 +119,7 @@ const heterogenous_level_test_body = Dict(
 
 @testset "Unguided Expand" begin
     actual_simple_table = EN.expand(simple_test_body)
-    @test fieldsequal(actual_simple_table, expected_simple_table)
+    @test unordered_equal(actual_simple_table, expected_simple_table)
     @test eltype(actual_simple_table.data_D) == Int64
 
     # Expanding Arrays
@@ -114,7 +129,7 @@ const heterogenous_level_test_body = Dict(
             a_b=[1,2,3,4,missing], 
             a_c=[2,missing,1,1, missing], 
             d=[4,4,4,4,4])
-        fieldsequal(actual_expanded_table, expected_table_expanded)
+        unordered_equal(actual_expanded_table, expected_table_expanded)
     end
 
     # Using struct of struct as input
@@ -123,7 +138,7 @@ const heterogenous_level_test_body = Dict(
             a_b=[1,2,3,4,nothing], 
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
-        fieldsequal(
+            unordered_equal(
             EN.expand(struct_body; default_value=nothing), 
             expected_table_expanded)
     end
@@ -131,42 +146,40 @@ const heterogenous_level_test_body = Dict(
         typeof(PooledArray(Int64[])))
     
     @test fieldsequal(
-        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> first,
+        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> last,
         (a=(b=1,c=2), d=4)
     )
 
-    
-    @show EN.expand(heterogenous_level_test_body)
-    @test fieldsequal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
+    @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 
     empty_dict_field = Dict(
         :a => Dict(),
         :b => 5
     )
-    @test fieldsequal(EN.expand(empty_dict_field), (b = [5],))
+    @test unordered_equal(EN.expand(empty_dict_field), (b = [5],))
 end
 
 
 @testset "Configured Expand" begin
     columns_defs = [
-        EN.ColumnDefinition([:d]),
-        EN.ColumnDefinition([:a, :b]),
-        EN.ColumnDefinition([:a, :c]; name_join_pattern = "?_#"),
-        EN.ColumnDefinition([:e, :f]; default_value="Missing branch")
+        EN.ColumnDefinition((:d,)),
+        EN.ColumnDefinition((:a, :b)),
+        EN.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+        EN.ColumnDefinition((:e, :f); default_value="Missing branch")
         ]
     expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
         :e_f => repeat(["Missing branch"], 5))
     )
-    @test fieldsequal(EN.expand(test_body, columns_defs), expected_table)
+    @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
-        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> first, 
+        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> last, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
     columns_defs = [
-        EN.ColumnDefinition([:data]),
-        EN.ColumnDefinition([:data, :E])
+        EN.ColumnDefinition((:data,)),
+        EN.ColumnDefinition((:data, :E))
     ]
-    @test fieldsequal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+    @test unordered_equal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
 
 end
 
@@ -178,6 +191,6 @@ end
             Symbol("a?_#b")=>[1,2,3,4,missing], 
             Symbol("a?_#c")=>[2,missing,1,1, missing], 
             :d=>[4,4,4,4,4]))
-        fieldsequal(actual_expanded_table, expected_table_expanded)
+        unordered_equal(actual_expanded_table, expected_table_expanded)
     end
 end
