@@ -1,3 +1,19 @@
+@enum StepType dict arr leaf default merge_cols stack_cols columns
+
+struct ExpandMissing end
+struct UnpackStep{N,T,C}
+    type::StepType
+    name::N
+    data::T
+    level::Int64
+    path_node::C
+end
+get_step_type(u::UnpackStep) = u.type
+get_name(u::UnpackStep) = u.name
+get_data(u::UnpackStep) = u.data
+get_level(u::UnpackStep) = u.level
+get_path_node(u::UnpackStep) = u.path_node
+
 ##### NameValueContainer #####
 ##############################
 
@@ -21,24 +37,27 @@ function has_namevaluecontainer_element(itr)
 end
 get_member_types(::Type{T}) where T = T isa Union ? Base.uniontypes(T) : [T]
 
-"""Define a pairs iterator for all DataType structs"""
-get_pairs(x::T) where T = get_pairs(StructTypes.StructType(T), x)
-get_pairs(::StructTypes.DataType, x::T) where T = ((p, getproperty(x, p)) for p in fieldnames(T))
-get_pairs(::StructTypes.DictType, x) = pairs(x)
 
 """Get the keys/names of any NameValueContainer"""
-get_names(x::T) where T = get_names(StructTypes.StructType(T), x)
-get_names(::StructTypes.DataType, x::T) where T = (n for n in fieldnames(T))
-get_names(::StructTypes.DictType, x) = keys(x)
+@generated function get_names(x::T) where T
+    struct_t = StructTypes.StructType(T)
+    if struct_t isa StructTypes.DataType
+        return :((n for n in fieldnames(T)))
+    elseif struct_t isa StructTypes.DictType
+        return :(keys(x))
+    end
+    return :(TypeError(:get_names, "Expected a dict or struct", NameValueContainer, T))
+end
 
-
-get_value(x::T, name) where T = get_value(StructTypes.StructType(T), x, name)
-get_value(::StructTypes.DataType, x, name) = getproperty(x, name)
-get_value(::StructTypes.DictType, x, name) = x[name]
-
-get_value(x::T, name, default) where T = get_value(StructTypes.StructType(T), x, name, default)
-get_value(::StructTypes.DataType, x, name, default) = hasproperty(x, name) ? getproperty(x, name) : default
-get_value(::StructTypes.DictType, x, name, default) = get(x, name, default)
+@generated function get_value(x::T, name, default) where T
+    struct_t = StructTypes.StructType(T)
+    if struct_t isa StructTypes.DataType
+        return :(hasproperty(x, name) ? getproperty(x, name) : default)
+    elseif struct_t isa StructTypes.DictType
+        return :(get(x, name, default))
+    end
+    return :(TypeError(:get_names, "Expected a dict or struct", NameValueContainer, T))
+end
 
 ##### NestedIterator #####
 ##########################
@@ -223,7 +242,7 @@ function append_name!(def, name)
     return def
 end
 
-function get_unique_names_and_children(col_defs::ColumnDefs, depth)
+function get_unique_names_and_children(path_node, depth)
     unique_names = get_unique_current_names(col_defs, depth)
     names_with_children = get_unique_current_names(
         (def for def in col_defs if has_more_keys(def, depth)),
@@ -247,6 +266,7 @@ end
 ColumnSet = Dict{Tuple, NestedIterator} 
 columnset(col, depth) = ColumnSet(Tuple(() for _ in 1:depth) => col)
 init_column_set(data, depth) = columnset(NestedIterator(data), depth)
+init_column_set(step) = init_column_set(get_data(step), get_name(step), get_level(step))
 function init_column_set(data, name, depth)
     col_set = init_column_set(data, depth)
     prepend_name!(col_set, name, depth)
@@ -337,10 +357,10 @@ function cycle_columns_to_length!(cols::ColumnSet)
 end
 
 """Return a missing column for each member of a ColumnDefs"""
-function make_missing_column_set(col_defs::ColumnDefs, current_index)
+function make_missing_column_set(path_node, current_index)
     missing_column_set =  Dict(
-        path_to_children(def, current_index) => NestedIterator(default_value(def))
-        for def in col_defs
+        path_to_children(value_node, current_index) => get_default(value_node)
+        for value_node in get_all_value_nodes(path_node)
     )
     return missing_column_set
 end
@@ -356,37 +376,58 @@ end
 #####################
 
 abstract type AbstractPathNode end
-abstract type AbstractValueNode <: AbstractPathNode end
-
-struct TopLevelNode <: AbstractPathNode
-    children::Vector{AbstractPathNode}
-end
 
 struct PathNode <: AbstractPathNode
     name
     children::Vector{AbstractPathNode}
 end
 
-struct ValueNode <: AbstractValueNode
+struct ValueNode <: AbstractPathNode
     name
     children::Vector{AbstractPathNode}
     field_path::Tuple
     pool_arrays
+    default::NestedIterator
 end
-ValueNode(name, field_path, pool_arrays) = ValueNode(name, ValueNode[], field_path, pool_arrays)
+
+struct SimpleNode <: AbstractPathNode
+    name
+end
+ValueNode(name, field_path, pool_arrays, default) = ValueNode(name, ValueNode[], field_path, pool_arrays,default)
 
 children(n::AbstractPathNode) = n.children
-name(n::AbstractPathNode) = n.name
-field_path(n::AbstractValueNode) = n.field_path
-pool_arrays(n::AbstractValueNode) = n.pool_arrays
+get_name(n::AbstractPathNode) = n.name
+field_path(n::ValueNode) = n.field_path
+pool_arrays(n::ValueNode) = n.pool_arrays
+get_default(n::ValueNode) = n.default
+
+function path_to_children(c::ValueNode, current_index)
+    fp = field_path(c)
+    return fp[current_index:end]
+end
+
+function get_all_value_nodes(node)
+    value_node_channel = Channel{ValueNode}() do ch
+        get_all_value_nodes(node, ch)
+    end
+    return collect(value_node_channel)
+end
+function get_all_value_nodes(node::T, ch) where {T}
+    if T <: ValueNode
+        put!(ch, node)
+        return nothing
+    end
+    get_all_value_nodes.(children(node), Ref(ch))
+    return nothing
+end
+
+
 
 """
 SIDE EFFECT: also appends :unnamed to any column defs that stop at a pathnode to capture any
 loose values in an array at that level
 """
 function make_path_nodes!(column_defs, depth = 1)
-    # todo: cases where we are filtering down to a "current name" might be 
-    # better as some kind of grouping
     unique_names = get_unique_current_names(column_defs, depth)
     nodes = Vector{AbstractPathNode}(undef, length(unique_names))
     for (i, unique_name) in enumerate(unique_names)
@@ -395,15 +436,12 @@ function make_path_nodes!(column_defs, depth = 1)
         
         all_value_nodes = all(are_value_nodes)
         mix_of_node_types = !all_value_nodes && any(are_value_nodes)
-        # todo turn this into a warning
-        # if mix_of_node_types
-        #     throw(ArgumentError("The path name $unique_name refers a value field in one branch and to nested child(ren) fields in another: $(field_path.(children_col_defs))"))
-        # end
 
         if all_value_nodes
             # If we got to a value node, there should only be one.
             def = first(matching_defs)
-            nodes[i] = ValueNode(unique_name, field_path(def), pool_arrays(def))
+            nodes[i] = ValueNode(
+                unique_name, field_path(def), pool_arrays(def), NestedIterator(default_value(def)))
             continue
         end
 
@@ -416,7 +454,11 @@ function make_path_nodes!(column_defs, depth = 1)
         if mix_of_node_types
             without_child_idx = findfirst(identity, are_value_nodes)
             without_child = matching_defs[without_child_idx]
-            value_column_node = ValueNode(:unnamed, (field_path(without_child)..., :unnamed),pool_arrays(without_child))
+            value_column_node = ValueNode(
+                :unnamed, 
+                (field_path(without_child)..., :unnamed), 
+                pool_arrays(without_child),
+                NestedIterator(default_value(without_child)))
             push!(child_nodes, value_column_node)
             append_name!(without_child, :unnamed)
         end
@@ -428,6 +470,6 @@ end
 
 
 """Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(col_defs::ColumnDefs) = TopLevelNode(make_path_nodes!(col_defs))
-
+make_path_graph(col_defs::ColumnDefs) = PathNode(:TOP_LEVEL, make_path_nodes!(col_defs))
+make_path_graph(::Nothing) = nothing
 

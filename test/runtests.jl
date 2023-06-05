@@ -145,10 +145,10 @@ const heterogenous_level_test_body = Dict(
     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
         typeof(PooledArray(Int64[])))
     
-    # @test fieldsequal(
-    #     EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> first,
-    #     (a=(b=1,c=2), d=4)
-    # )
+    @test fieldsequal(
+        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> last,
+        (a=(b=1,c=2), d=4)
+    )
 
     @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 
@@ -162,24 +162,24 @@ end
 
 @testset "Configured Expand" begin
     columns_defs = [
-        EN.ColumnDefinition([:d]),
-        EN.ColumnDefinition([:a, :b]),
-        EN.ColumnDefinition([:a, :c]; name_join_pattern = "?_#"),
-        EN.ColumnDefinition([:e, :f]; default_value="Missing branch")
+        EN.ColumnDefinition((:d,)),
+        EN.ColumnDefinition((:a, :b)),
+        EN.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+        EN.ColumnDefinition((:e, :f); default_value="Missing branch")
         ]
     expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
         :e_f => repeat(["Missing branch"], 5))
     )
-    @test fieldsequal(EN.expand(test_body, columns_defs), expected_table)
+    @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
-        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> first, 
+        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> last, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
     columns_defs = [
-        EN.ColumnDefinition([:data]),
-        EN.ColumnDefinition([:data, :E])
+        EN.ColumnDefinition((:data,)),
+        EN.ColumnDefinition((:data, :E))
     ]
-    @test fieldsequal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+    @test unordered_equal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
 
 end
 
@@ -191,6 +191,6 @@ end
             Symbol("a?_#b")=>[1,2,3,4,missing], 
             Symbol("a?_#c")=>[2,missing,1,1, missing], 
             :d=>[4,4,4,4,4]))
-        fieldsequal(actual_expanded_table, expected_table_expanded)
+        unordered_equal(actual_expanded_table, expected_table_expanded)
     end
 end

@@ -2,7 +2,8 @@ function expand(data, column_defs=nothing; default_value = missing, lazy_columns
         pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
         column_style::ColumnStyle=flat_columns, name_join_pattern = "_")
 
-    columns = create_columns(data, column_defs; default_value=default_value)
+    path_graph = make_path_graph(column_defs)
+    columns = create_columns(data, path_graph; default_value=default_value)
     args = column_defs isa Nothing ? 
         (columns, column_names) :
         (columns, column_defs) 
