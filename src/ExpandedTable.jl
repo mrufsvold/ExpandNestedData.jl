@@ -42,7 +42,7 @@ function ExpandedTable(columns, column_names::Dict; name_join_pattern, pool_arra
     col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
     return ExpandedTable(columns, col_defs; kwargs...)
 end
-function ExpandedTable(columns::Dict{K, T}, column_defs::ColumnDefs; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
+function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition}; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
     path_graph = make_path_graph(column_defs)
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
