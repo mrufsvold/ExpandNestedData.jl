@@ -32,9 +32,9 @@ mutable struct ColumnDefinition
     # Path to values
     field_path::Tuple
     # name of this column in the table once expanded
-    const column_name::Symbol
-    const default_value
-    const pool_arrays::Bool
+    column_name::Symbol
+    default_value
+    pool_arrays::Bool
 end
 # Accessors
 field_path(c::ColumnDefinition) = c.field_path
