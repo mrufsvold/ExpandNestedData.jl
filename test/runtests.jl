@@ -141,6 +141,18 @@ const heterogenous_level_test_body = Dict(
         :b => 5
     )
     @test unordered_equal(EN.expand(empty_dict_field), (b = [5],))
+
+    @test begin
+        two_layer_deep = Dict(
+            :a => Dict(
+                :b => Dict(
+                    :c => 1,
+                    :d => 2,
+                )
+            )
+        )
+        unordered_equal(EN.expand(two_layer_deep), (a_b_c = [1], a_b_d = [2]))
+    end
 end
 
 
