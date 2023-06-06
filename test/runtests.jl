@@ -59,6 +59,7 @@ end
             (:a,) => ExpandNestedData.NestedIterator([1,2]),
             (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
         )
+    @test fieldsequal(ExpandNestedData.ColumnDefinition((:a,)), ExpandNestedData.ColumnDefinition([:a]))
 end
 
 

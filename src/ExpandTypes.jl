@@ -57,12 +57,15 @@ pool_arrays(c::ColumnDefinition) = c.pool_arrays
 ## Returns
 `::ColumnDefinition`
 """
-function ColumnDefinition(field_path; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
+function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
     if column_name isa Nothing
         path = last(field_path) == :unnamed ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
+end
+function ColumnDefinition(field_path; kwargs...)
+    return ColumnDefinition(tuple(field_path...); kwargs...)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
