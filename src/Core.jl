@@ -18,7 +18,7 @@ Expand a nested data structure into a Tables
 * `lazy_columns::Bool` - If true, return columns using a lazy iterator. If false, `collect` into regular vectors before returning. Default: `true` (don't collect).
 * `pool_arrays::Bool` - If true, use pool arrays to `collect` the columns. Default: `false`.
 * `column_names::Dict{Tuple, Symbol}` - A lookup to replace column names in the final result with any other symbol
-* `column_style::Symbol` - Choose returned column style from `:nested` or `:flat`. If nested, `column\_names` are ignored 
+* `column_style::Symbol` - Choose returned column style from `:nested` or `:flat`. If nested, `column_names` are ignored 
     and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `:flat`
 * `name_join_pattern::String` - A pattern to put between the keys when joining the path into a column name. Default: `"_"`.
 ## Returns
@@ -42,10 +42,10 @@ function expand(data, column_definitions=nothing;
 
     expanded_table = ExpandedTable(columns, final_column_defs; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = typed_column_style, name_join_pattern=name_join_pattern)
 
-    final_table = if column_style == flat_columns
-        return as_flat_table(expanded_table)
-    elseif column_style == nested_columns
-        return as_nested_table(expanded_table)
+    final_table = if typed_column_style == flat_columns
+        as_flat_table(expanded_table)
+    elseif typed_column_style == nested_columns
+        as_nested_table(expanded_table)
     end
     return final_table
 end
