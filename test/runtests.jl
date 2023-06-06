@@ -118,11 +118,11 @@ const heterogenous_level_test_body = Dict(
     # Using struct of struct as input
     @test begin
         expected_table_expanded = (
-            a_b=[1,2,3,4,nothing], 
+            new_column=[1,2,3,4,nothing], 
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
             unordered_equal(
-            EN.expand(struct_body; default_value=nothing), 
+            EN.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
             expected_table_expanded)
     end
     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
