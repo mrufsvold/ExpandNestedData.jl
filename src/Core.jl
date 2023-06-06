@@ -175,9 +175,9 @@ function process_dict!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
     names_num = length(child_nodes)
     if names_num == 0
         push!(instruction_stack, column_set_step(ColumnSet()))
-    elseif names_num > 1
-        push!(instruction_stack, merge_instruction(get_name(step), length(child_nodes), level))
+        return nothing
     end
+    push!(instruction_stack, merge_instruction(get_name(step), length(child_nodes), level))
 
     for child_node in child_nodes
         name = get_name(child_node)
