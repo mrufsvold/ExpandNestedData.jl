@@ -19,12 +19,6 @@ function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition
         for def in column_defs
     )
     expanded_table = ExpandedTable(col_lookup, column_tuple)
-    
-    if column_style == flat_columns
-        return as_flat_table(expanded_table)
-    elseif column_style == nested_columns
-        return as_nested_table(expanded_table)
-    end
 end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
