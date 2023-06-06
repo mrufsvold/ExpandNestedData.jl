@@ -102,7 +102,6 @@ tbl |> rows |> first
 
 ## API
 ```@docs
-ExpandNestedData.expand(::Any)
 ExpandNestedData.expand(::Any, ::Vector{ExpandNestedData.ColumnDefinition})
 ExpandNestedData.ColumnDefinition(::Any;)
 ```
