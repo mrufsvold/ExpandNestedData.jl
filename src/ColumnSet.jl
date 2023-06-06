@@ -18,7 +18,7 @@ column_length(cols) = cols |> values |> first |> length
 Apply f to each key, column pair by popping the value and readding
 the key (this prevents mismatching key hashes after manipulating a ColumnSet)"""
 function apply_in_place!(cols, f, args...)
-    initial_keys = copy(keys(cols))
+    initial_keys = collect(keys(cols))
     for key in initial_keys 
         val = pop!(cols, key)
         key, val = f(key, val, args...)

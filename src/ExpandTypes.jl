@@ -32,9 +32,9 @@ mutable struct ColumnDefinition
     # Path to values
     field_path::Tuple
     # name of this column in the table once expanded
-    const column_name::Symbol
-    const default_value
-    const pool_arrays::Bool
+    column_name::Symbol
+    default_value
+    pool_arrays::Bool
 end
 # Accessors
 field_path(c::ColumnDefinition) = c.field_path
@@ -46,7 +46,7 @@ pool_arrays(c::ColumnDefinition) = c.pool_arrays
     ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
 
 ## Args
-* `field_path`: Vector of keys/fieldnames that constitute a path from the top of the data to the values to extract for the column
+* `field_path`: Vector or Tuple of keys/fieldnames that constitute a path from the top of the data to the values to extract for the column
 
 ## Keyword Args
 * `column_name::Symbol`: A name for the resulting column. If `nothing`, defaults to joining the field_path with snake_case_format.
@@ -57,12 +57,15 @@ pool_arrays(c::ColumnDefinition) = c.pool_arrays
 ## Returns
 `::ColumnDefinition`
 """
-function ColumnDefinition(field_path; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_")
+function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
     if column_name isa Nothing
         path = last(field_path) == :unnamed ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
+end
+function ColumnDefinition(field_path; kwargs...)
+    return ColumnDefinition(tuple(field_path...); kwargs...)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
