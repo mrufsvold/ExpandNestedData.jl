@@ -1,17 +1,45 @@
 using DataStructures: Stack
 
-function expand(data, column_defs=nothing; default_value = missing, lazy_columns::Bool = false,
-    pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
-    column_style::ColumnStyle=flat_columns, name_join_pattern = "_")
+"""
+    expand(data, column_defs=nothing; 
+            default_value = missing, 
+            lazy_columns::Bool = false,
+            pool_arrays::Bool = false, 
+            column_names::Dict = Dict{Tuple, Symbol}(),
+            column_style::Symbol=:flat, 
+            name_join_pattern = "_")
 
-path_graph = make_path_graph(column_defs)
-columns = create_columns(data, path_graph; default_value=default_value)
-args = column_defs isa Nothing ? 
-    (columns, column_names) :
-    (columns, column_defs) 
-return ExpandedTable(args...; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style, name_join_pattern=name_join_pattern)
+Expand a nested data structure into a Tables
+
+Args:
+* data::Any - The nested data to unpack
+* column::Vector{ColumnDefinition} - A list of paths to follow in `data`, ignoring other branches. Optional. Default: `nothing`.
+* lazy_columns::Bool - If true, return columns using a lazy iterator. If false, `collect` into regular vectors before returning. Default: `true` (don't collect).
+* pool_arrays::Bool - If true, use pool arrays to `collect` the columns. Default: `false`.
+* column_names::Dict{Tuple, Symbol} - A lookup to replace column names in the final result with any other symbol
+* column_style::Symbol - Choose returned column style from `:nested` or `:flat`. If nested, `column_names` are ignored and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `:flat`
+* name_join_pattern::String - A pattern to put between the keys when joining the path into a column name. Default: `"_"`.
+"""
+function expand(data, column_definitions=nothing; 
+        default_value = missing, 
+        lazy_columns::Bool = false,
+        pool_arrays::Bool = false, 
+        column_names::Dict = Dict{Tuple, Symbol}(),
+        column_style::Symbol=:flat, 
+        name_join_pattern = "_")
+
+    typed_column_style = get_column_style(column_style)
+    path_graph = make_path_graph(column_definitions)
+    columns = create_columns(data, path_graph; default_value=default_value)
+    
+    final_column_defs = column_definitions isa Nothing ? 
+        construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern) :
+        column_definitions
+
+    return ExpandedTable(columns, final_column_defs; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = typed_column_style, name_join_pattern=name_join_pattern)
 end
 
+"""Wrap an object in the correct UnpackStep"""
 function wrap_object(name::N, data::T, level::Int64, path_node::C, step_type::S=nothing) where {N,T,C,S}
     if T <: ExpandMissing
         return default_object(name, level, path_node)
@@ -29,21 +57,11 @@ function wrap_object(name::N, data::T, level::Int64, path_node::C, step_type::S=
     return UnpackStep{N,T,C}(obj_type, name, data, level, path_node)
 end
 
-function default_object(name::N, level, path_node::C) where {N,C}
-    return UnpackStep{N, Nothing, C}(default, name, nothing, level, path_node)
-end
-
-function stack_instruction(name::N, col_n, level) where N
-    return UnpackStep{N, Int64, Nothing}(stack_cols, name, col_n, level, nothing)
-end
-
-function merge_instruction(name::N, col_n, level) where N
-    return UnpackStep{N, Int64, Nothing}(merge_cols, name, col_n, level, nothing)
-end
-
-function column_set_step(cols::T) where T
-    return UnpackStep{Nothing, T, Nothing}(columns, nothing, cols, 0, nothing)
-end
+# Helper functions for building Unpack steps
+default_object(name::N, level, path_node::C) where {N,C} = UnpackStep{N, Nothing, C}(default, name, nothing, level, path_node)
+stack_instruction(name::N, col_n, level) where N = UnpackStep{N, Int64, Nothing}(stack_cols, name, col_n, level, nothing)
+merge_instruction(name::N, col_n, level) where N = UnpackStep{N, Int64, Nothing}(merge_cols, name, col_n, level, nothing)
+column_set_step(cols::T) where T = UnpackStep{Nothing, T, Nothing}(columns, nothing, cols, 0, nothing)
 
 
 function create_columns(data, path_graph; default_value=missing, kwargs...)

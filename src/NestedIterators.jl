@@ -15,11 +15,13 @@ Base.collect(x::NestedIterator, pool_arrays=false) = pool_arrays ? PooledArray(x
 
 abstract type InstructionCapture <: Function end
 
+"""Seed is the core starter for a NestedIterator"""
 struct Seed{T} <: InstructionCapture
     data::T
 end
 (s::Seed)(i) = s.data[i]
 
+"""Captures the repeat value for a repeat_each call"""
 struct UnrepeatEach <: InstructionCapture
     n::Int64
 end
@@ -35,6 +37,7 @@ function repeat_each(c::NestedIterator{T}, n) where T
     end
 end
 
+"""Captures the repeat value for a cycle call"""
 struct Uncycle <: InstructionCapture
     n::Int64
 end
@@ -50,7 +53,7 @@ function cycle(c::NestedIterator{T}, n) where T
     end
 end
 
-
+"""Captures the two getindex functions of stacked NestedIterators. f_len tells which index to break over to g."""
 struct Unstack{F, G} <: InstructionCapture
     f_len::Int64
     f::F

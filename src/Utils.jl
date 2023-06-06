@@ -20,6 +20,7 @@ get_member_types(::Type{T}) where T = T isa Union ? Base.uniontypes(T) : [T]
     return :(TypeError(:get_names, "Expected a dict or struct", NameValueContainer, T))
 end
 
+"""Get the value for a key of any NameValueContainer. If it does not have the key, return default"""
 @generated function get_value(x::T, name, default) where T
     struct_t = StructTypes.StructType(T)
     if struct_t isa StructTypes.DataType
@@ -29,6 +30,7 @@ end
     end
     return :(TypeError(:get_names, "Expected a dict or struct", NameValueContainer, T))
 end
-# Link a list of keys into an underscore separted column name
+
+"""Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
 

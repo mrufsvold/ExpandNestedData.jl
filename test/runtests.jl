@@ -59,23 +59,6 @@ end
             (:a,) => ExpandNestedData.NestedIterator([1,2]),
             (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
         )
-
-    @test begin
-        raw_actual = ExpandNestedData.column_set_product!(col_set)
-        actual_set = Set([
-            (a=A, b=B)
-            for (A,B) in zip(raw_actual[(:a,)], raw_actual[(:b,)])
-        ])
-        raw_expected = ExpandNestedData.ColumnSet(
-                (:a,) => ExpandNestedData.NestedIterator([1,1,1,1,2,2,2,2]),
-                (:b,) => ExpandNestedData.NestedIterator([3,4,5,6,3,4,5,6]),
-            )
-        expected_set = Set([
-            (a=A, b=B)
-            for (A,B) in zip(raw_expected[(:a,)], raw_expected[(:b,)])
-        ])
-        isequal(actual_set, expected_set)
-    end 
 end
 
 
@@ -135,18 +118,18 @@ const heterogenous_level_test_body = Dict(
     # Using struct of struct as input
     @test begin
         expected_table_expanded = (
-            a_b=[1,2,3,4,nothing], 
+            new_column=[1,2,3,4,nothing], 
             a_c=[2,nothing,1,1, nothing], 
             d=[4,4,4,4,4])
             unordered_equal(
-            EN.expand(struct_body; default_value=nothing), 
+            EN.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
             expected_table_expanded)
     end
     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
         typeof(PooledArray(Int64[])))
     
     @test fieldsequal(
-        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> last,
+        EN.expand(struct_body; column_style=:nested) |> rows |> last,
         (a=(b=1,c=2), d=4)
     )
 
@@ -172,7 +155,7 @@ end
     )
     @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
-        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> last, 
+        EN.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
     columns_defs = [

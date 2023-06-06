@@ -68,14 +68,14 @@ function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, nam
     column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
     ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
 end
+function construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)
+    paths = keys(columns)
+    return ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
+end
 
 function current_path_name(c::ColumnDefinition, depth)
     fp = field_path(c)
     return fp[depth]
-end
-function path_to_children(c::ColumnDefinition, current_index)
-    fp = field_path(c)
-    return fp[current_index:end]
 end
 get_unique_current_names(defs, depth) = unique((current_path_name(def, depth) for def in defs))
 function make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, depth)

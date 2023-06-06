@@ -12,7 +12,7 @@ Depth = 4
 ### Install
 ```@repl
 using Pkg
-Pkg.add(url="https://github.com/mrufsvold/ExpandNestedData.jl")
+Pkg.add("ExpandNestedData")
 ```
 ### Basic Usage
 ExpandNestedData provides a single function `expand` to flatten out nested data. 
@@ -38,19 +38,19 @@ message = JSON3.read("""
 expand(message) |> DataFrame
 ```
 ## Configuring Options
-While `expand` can produce a `Table` out of the box, it is often useful to configure
+While `expand` can produce a `Table` out-of-the-box, it is often useful to configure
 some options in how it handles the normalization process. `ExpandNestedData.jl` offers two ways to set
-these configurations. You can set them globally with `kwargs` or exercise finer control with
+these configurations. You can set them at the table-level with `kwargs` to `expand` or exercise finer control with
 per-column configurations.
 ### Keyword Arguments
 | Parameter | Description |
 | --------- | ----------- |
-| `flatten_arrays::Bool`                        | When a leaf node is an array, should the values be flattened into separate rows or treated as a single value. Default: `true`|
 | `default_value::Any`                          | When a certain key exists in one branch, but not another, what value should be used to fill missing. Default: `missing` |
-| `pool_arrays::Bool`                           | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
 | `lazy_columns::Bool` | If true, return columns as a custom lazy iterator instead of collecting them as materialized vectors. This option can speed things up if you only need to access a subset of rows once. It is usually better to materialize the columns since `getindex()` on the lazy columns is expensive. Default: `false` |
-| `column_names::Dict{Vector{Symbol}, Symbol}`  | Provide a mapping of key/fieldname paths to replaced column names |
-| `column_style::T<:ExpandNestedData.ColumnStyle` | Choose returned column style from `nested_columns` or `flat_columns`. If nested, `column_names` are ignored and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `flat_columns` |
+| `pool_arrays::Bool`                           | When collecting vectors for columns, choose whether to use PooledArrays instead of Base.Vector |
+| ` column_names::Dict{Tuple, Symbol}`  | Provide a mapping of key/fieldname paths to replaced column names |
+| `column_style::Symbol` | Choose returned column style from `:nested` or `:flat`. If nested, `column_names` are ignored and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `:flat` |
+| `name_join_pattern::String` | A pattern to put between the keys when joining the path into a column name. Default: `"_"`. |
 
 ```@example
 using ExpandNestedData #hide
@@ -60,7 +60,7 @@ using DataFrames #hide
 message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4], :c => 1), Dict(:b => []) ], :d => 4) #hide
 
 name_map = Dict([:a, :b] => :Column_B)
-expand(message; flatten_arrays=true, default_value="no value", pool_arrays=true, column_names=name_map) |> DataFrame
+expand(message; default_value="no value", pool_arrays=true, column_names=name_map) |> DataFrame
 ```
 ### Using ColumnDefintions
 Instead of setting the configurations for the whole dataset, you can use a
@@ -76,7 +76,7 @@ message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4]
 
 column_defs = [
     ColumnDefinition([:d]; column_name = :ColumnD),
-    ColumnDefinition([:a, :b]; flatten_arrays=true),
+    ColumnDefinition([:a, :b]),
     ColumnDefinition([:e, :f]; column_name = :MissingColumn, default_value="Missing branch")
 ]
 

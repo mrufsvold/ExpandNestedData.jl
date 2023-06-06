@@ -2,6 +2,7 @@
 [![codecov](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl/branch/main/graph/badge.svg?token=LQPXGYX4VC)](https://codecov.io/gh/mrufsvold/ExpandNestedData.jl)
 ### Documenation
 
+[![Stable](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/ExpandNestedData.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://mrufsvold.github.io/ExpandNestedData.jl/dev)
 
 
@@ -40,7 +41,10 @@ expand(message, column_defs) |> DataFrame
 ```
 
 ## Roadmap
+- [x] Return a custom Table that allows nested and flattened access to columns
 - [ ] Support for AbstractTree.jl input (This would enable composability with Gumbo.jl and others)
-- [ ] Return a custom Table that allows nested and flattened access to columns
 - [ ] Use custom Table as input for compressing tabular data to nested data
+- [ ] Widen arrays so column names match XPath expressions
+- [ ] Parse Xpath to ColumnDefinitions
+- [ ] Dispatch on user-defined `get_keys` and `get_values` functions to traverse arbitrary custom types
 
