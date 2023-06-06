@@ -12,7 +12,7 @@ Depth = 4
 ### Install
 ```@repl
 using Pkg
-Pkg.add(url="https://github.com/mrufsvold/ExpandNestedData.jl")
+Pkg.add("ExpandNestedData")
 ```
 ### Basic Usage
 ExpandNestedData provides a single function `expand` to flatten out nested data. 

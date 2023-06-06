@@ -1,15 +1,22 @@
 using DataStructures: Stack
 
-function expand(data, column_defs=nothing; default_value = missing, lazy_columns::Bool = false,
-    pool_arrays::Bool = false, column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
-    column_style::ColumnStyle=flat_columns, name_join_pattern = "_")
+function expand(data, column_defs=nothing; 
+        default_value = missing, 
+        lazy_columns::Bool = false,
+        pool_arrays::Bool = false, 
+        column_names::Dict{Vector{Symbol}, Symbol} = Dict{Vector{Symbol}, Symbol}(),
+        column_style::Symbol=:flat, 
+        name_join_pattern = "_")
 
-path_graph = make_path_graph(column_defs)
-columns = create_columns(data, path_graph; default_value=default_value)
-args = column_defs isa Nothing ? 
-    (columns, column_names) :
-    (columns, column_defs) 
-return ExpandedTable(args...; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = column_style, name_join_pattern=name_join_pattern)
+    typed_column_style = get_column_style(column_style)
+    path_graph = make_path_graph(column_defs; joiner=name_join_pattern)
+    columns = create_columns(data, path_graph; default_value=default_value)
+    
+    final_column_defs = column_defs isa Nothing ? 
+        construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern) :
+        column_defs
+
+    return ExpandedTable(columns, final_column_defs; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = typed_column_style, name_join_pattern=name_join_pattern)
 end
 
 function wrap_object(name::N, data::T, level::Int64, path_node::C, step_type::S=nothing) where {N,T,C,S}
