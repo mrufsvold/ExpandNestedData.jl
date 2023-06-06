@@ -73,10 +73,6 @@ function current_path_name(c::ColumnDefinition, depth)
     fp = field_path(c)
     return fp[depth]
 end
-function path_to_children(c::ColumnDefinition, current_index)
-    fp = field_path(c)
-    return fp[current_index:end]
-end
 get_unique_current_names(defs, depth) = unique((current_path_name(def, depth) for def in defs))
 function make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, depth)
     return filter(

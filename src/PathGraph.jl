@@ -3,11 +3,13 @@
 
 abstract type AbstractPathNode end
 
+"""A node in the ColumnDefinition graph that has children"""
 struct PathNode <: AbstractPathNode
     name
     children::Vector{AbstractPathNode}
 end
 
+"""A node in the ColumnDefinition graph that points to a leaf/value"""
 struct ValueNode <: AbstractPathNode
     name
     children::Vector{AbstractPathNode}
@@ -16,6 +18,7 @@ struct ValueNode <: AbstractPathNode
     default::NestedIterator
 end
 
+"""A node to capture a name (for emulating node behavior when unguided)"""
 struct SimpleNode <: AbstractPathNode
     name
 end
@@ -27,7 +30,8 @@ field_path(n::ValueNode) = n.field_path
 pool_arrays(n::ValueNode) = n.pool_arrays
 get_default(n::ValueNode) = n.default
 
-function path_to_children(c::ValueNode, current_index)
+"""Given a certain depth index, return the rest of the path down to the value"""
+function path_to_value(c::ValueNode, current_index)
     fp = field_path(c)
     return fp[current_index:end]
 end
