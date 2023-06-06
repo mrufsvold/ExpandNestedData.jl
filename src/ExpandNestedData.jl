@@ -12,6 +12,6 @@ include("ColumnSet.jl")
 include("ExpandTypes.jl")
 include("PathGraph.jl")
 include("ExpandedTable.jl")
-include("StackProcessing.jl")
+include("Core.jl")
 
 end

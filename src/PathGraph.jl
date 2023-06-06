@@ -12,6 +12,7 @@ end
 """A node in the ColumnDefinition graph that points to a leaf/value"""
 struct ValueNode <: AbstractPathNode
     name
+    final_name::Symbol
     children::Vector{AbstractPathNode}
     field_path::Tuple
     pool_arrays
@@ -22,7 +23,9 @@ end
 struct SimpleNode <: AbstractPathNode
     name
 end
-ValueNode(name, field_path, pool_arrays, default) = ValueNode(name, ValueNode[], field_path, pool_arrays,default)
+function ValueNode(name, field_path, pool_arrays, default; col_name)
+    ValueNode(name, col_name, ValueNode[], field_path, pool_arrays,default)
+end
 
 children(n::AbstractPathNode) = n.children
 get_name(n::AbstractPathNode) = n.name
@@ -71,7 +74,8 @@ function make_path_nodes!(column_defs, depth = 1)
             # If we got to a value node, there should only be one.
             def = first(matching_defs)
             nodes[i] = ValueNode(
-                unique_name, field_path(def), pool_arrays(def), NestedIterator(default_value(def)))
+                unique_name, field_path(def), pool_arrays(def), NestedIterator(default_value(def));
+                col_name = column_name(def))
             continue
         end
 
@@ -88,7 +92,8 @@ function make_path_nodes!(column_defs, depth = 1)
                 :unnamed, 
                 (field_path(without_child)..., :unnamed), 
                 pool_arrays(without_child),
-                NestedIterator(default_value(without_child)))
+                NestedIterator(default_value(without_child));
+                col_name=column_name(without_child))
             push!(child_nodes, value_column_node)
             append_name!(without_child, :unnamed)
         end
@@ -101,4 +106,4 @@ end
 
 """Create a graph of field_paths that models the structure of the nested data"""
 make_path_graph(col_defs::Vector{ColumnDefinition}) = PathNode(:TOP_LEVEL, make_path_nodes!(col_defs))
-make_path_graph(::Nothing) = nothing
+make_path_graph(::Nothing; _...) = nothing

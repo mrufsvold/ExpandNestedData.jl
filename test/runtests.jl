@@ -129,7 +129,7 @@ const heterogenous_level_test_body = Dict(
         typeof(PooledArray(Int64[])))
     
     @test fieldsequal(
-        EN.expand(struct_body; column_style=EN.nested_columns) |> rows |> last,
+        EN.expand(struct_body; column_style=:nested) |> rows |> last,
         (a=(b=1,c=2), d=4)
     )
 
@@ -155,7 +155,7 @@ end
     )
     @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
     @test fieldsequal(
-        EN.expand(test_body, columns_defs; column_style=EN.nested_columns) |> rows |> last, 
+        EN.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
     )
     columns_defs = [

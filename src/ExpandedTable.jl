@@ -4,12 +4,29 @@ using TypedTables
 
 @enum ColumnStyle flat_columns nested_columns
 
+get_column_style(s::Symbol) = (flat=flat_columns, nested=nested_columns)[s]
 
 struct ExpandedTable
     col_lookup::Dict{Symbol, Tuple} # Name of column => path into nested data
     columns # TypedTable, nested in the same pattern as src_data
 end
 
+"""Construct an ExpandedTable from the results of `create_columns`"""
+function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition}; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
+    path_graph = make_path_graph(column_defs)
+    column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
+    col_lookup = Dict(
+        column_name(def) => field_path(def)
+        for def in column_defs
+    )
+    expanded_table = ExpandedTable(col_lookup, column_tuple)
+    
+    if column_style == flat_columns
+        return as_flat_table(expanded_table)
+    elseif column_style == nested_columns
+        return as_nested_table(expanded_table)
+    end
+end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
@@ -34,30 +51,6 @@ function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
     end
     return value_column
 end
-
-
-"""Construct an ExpandedTable from the results of `expand`"""
-function ExpandedTable(columns, column_names::Dict; name_join_pattern, pool_arrays, kwargs...)
-    paths = keys(columns)
-    col_defs = ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
-    return ExpandedTable(columns, col_defs; kwargs...)
-end
-function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition}; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
-    path_graph = make_path_graph(column_defs)
-    column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
-    col_lookup = Dict(
-        column_name(def) => field_path(def)
-        for def in column_defs
-    )
-    expanded_table = ExpandedTable(col_lookup, column_tuple)
-    
-    if column_style == flat_columns
-        return as_flat_table(expanded_table)
-    elseif column_style == nested_columns
-        return as_nested_table(expanded_table)
-    end
-end
-
 
 # Get Tables
 as_nested_table(t::ExpandedTable) = t.columns

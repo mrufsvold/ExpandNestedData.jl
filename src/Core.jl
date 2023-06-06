@@ -9,7 +9,7 @@ function expand(data, column_defs=nothing;
         name_join_pattern = "_")
 
     typed_column_style = get_column_style(column_style)
-    path_graph = make_path_graph(column_defs; joiner=name_join_pattern)
+    path_graph = make_path_graph(column_defs)
     columns = create_columns(data, path_graph; default_value=default_value)
     
     final_column_defs = column_defs isa Nothing ? 
