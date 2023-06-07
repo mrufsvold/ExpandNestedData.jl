@@ -25,7 +25,7 @@ end
 as the source data"""
 function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
     kvs = []
-    for child in children(path_graph)
+    for child in get_children(path_graph)
         push!(kvs, Symbol(get_name(child)) => make_column_tuple(columns, child, lazy_columns))
     end
 
@@ -33,11 +33,11 @@ function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::
     return Table(children_tuple)
 end
 function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
-    lazy_column = columns[field_path(path_graph)]
-    value_column =  lazy_columns ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
-    if length(children(path_graph)) > 0
+    lazy_column = columns[get_field_path(path_graph)]
+    value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
+    if length(get_children(path_graph)) > 0
         d = Dict(:unnamed => value_column)
-        for child in children(path_graph)
+        for child in get_children(path_graph)
             d[Symbol(get_name(child))] = make_column_tuple(columns, child, lazy_columns)
         end
         return Table(NamedTuple(d))

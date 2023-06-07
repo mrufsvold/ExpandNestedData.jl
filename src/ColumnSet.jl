@@ -3,12 +3,11 @@
 
 # Convenience alias for a dictionary of columns
 ColumnSet = Dict{Tuple, NestedIterator} 
-columnset(col, depth) = ColumnSet(Tuple(() for _ in 1:depth) => col)
-init_column_set(data, depth) = columnset(NestedIterator(data), depth)
+columnset(col, level) = ColumnSet(Tuple(() for _ in 1:level) => col)
 init_column_set(step) = init_column_set(get_data(step), get_name(step), get_level(step))
-function init_column_set(data, name, depth)
-    col_set = init_column_set(data, depth)
-    prepend_name!(col_set, name, depth)
+function init_column_set(data, name, level)
+    col_set = columnset(NestedIterator(data), level)
+    prepend_name!(col_set, name, level)
     return col_set
 end
 
@@ -27,15 +26,15 @@ function apply_in_place!(cols, f, args...)
 end
 
 """
-prepend_name!(cols, name, depth)
-Set the given name for all column keys at the given depth
+prepend_name!(cols, name, level)
+Set the given name for all column keys at the given level
 """
-function prepend_name!(cols, name, depth)
-    depth < 1 && return nothing
-    apply_in_place!(cols, _prepend_name, name, depth)
+function prepend_name!(cols, name, level)
+    level < 1 && return nothing
+    apply_in_place!(cols, _prepend_name, name, level)
 end
-function _prepend_name(key, val, name, depth)
-    new_key = Tuple(i==depth ? name : k for (i,k) in enumerate(key))
+function _prepend_name(key, val, name, level)
+    new_key = Tuple(i==level ? name : k for (i,k) in enumerate(key))
     return new_key, val
 end
 
@@ -81,7 +80,7 @@ get_column(cols::ColumnSet, name, default::NestedIterator) = name in keys(cols) 
 """Return a missing column for each member of a child path"""
 function make_missing_column_set(path_node)
     missing_column_set =  Dict(
-        field_path(value_node) => get_default(value_node)
+        get_field_path(value_node) => get_default(value_node)
         for value_node in get_all_value_nodes(path_node)
     )
     return missing_column_set
