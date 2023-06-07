@@ -28,7 +28,7 @@ is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
 ############################
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
-mutable struct ColumnDefinition
+struct ColumnDefinition
     # Path to values
     field_path::Tuple
     # name of this column in the table once expanded

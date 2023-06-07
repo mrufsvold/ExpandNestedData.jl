@@ -11,14 +11,13 @@ struct ExpandedTable
 end
 
 """Construct an ExpandedTable from the results of `create_columns`"""
-function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition}; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
-    path_graph = make_path_graph(column_defs)
+function ExpandedTable(columns::Dict{K, T}, path_graph; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
-        column_name(def) => field_path(def)
-        for def in column_defs
+        get_final_name(val_node) => get_field_path(val_node)
+        for val_node in get_all_value_nodes(path_graph)
     )
-    expanded_table = ExpandedTable(col_lookup, column_tuple)
+    return ExpandedTable(col_lookup, column_tuple)
 end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure

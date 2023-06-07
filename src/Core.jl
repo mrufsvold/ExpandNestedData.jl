@@ -35,12 +35,12 @@ function expand(data, column_definitions=nothing;
     typed_column_style = get_column_style(column_style)
     path_graph = make_path_graph(column_definitions)
     columns = create_columns(data, path_graph; default_value=default_value)
-    
-    final_column_defs = column_definitions isa Nothing ? 
-        construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern) :
-        column_definitions
 
-    expanded_table = ExpandedTable(columns, final_column_defs; lazy_columns = lazy_columns, pool_arrays = pool_arrays, column_style = typed_column_style, name_join_pattern=name_join_pattern)
+    final_path_graph = column_definitions isa Nothing ?
+        make_path_graph(construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)) :
+        path_graph
+
+    expanded_table = ExpandedTable(columns, final_path_graph; lazy_columns=lazy_columns, pool_arrays=pool_arrays)
 
     final_table = if typed_column_style == flat_columns
         as_flat_table(expanded_table)
@@ -90,6 +90,10 @@ function create_columns(data, path_graph; default_value=missing, kwargs...)
     return first(column_stack)
 end 
 
+"""
+    dispatch_step!(step, default_column, column_stack, instruction_stack)
+Generic dispatch to the correct function for this step
+"""
 function dispatch_step!(step, default_column, column_stack, instruction_stack)
     step_type = get_step_type(step)
 
@@ -114,13 +118,24 @@ function dispatch_step!(step, default_column, column_stack, instruction_stack)
     return nothing
 end
 
-#################
+"""
+process_leaf!(step, instruction_stack)
+Take a value at the end of a path and wrap it in a new ColumnSet
+"""
 function process_leaf!(step, instruction_stack)
     push!(instruction_stack, column_set_step(init_column_set(step)))
 end 
 
 
-# handle unpacking array-like objects
+""" 
+process_array!(step::UnpackStep, instruction_stack)
+Handle each element of an array
+If it is empty, return default value.
+If it is all "containers", stack the results.
+If it is all "values", return it to be processed as a leaf
+If it is a mix, take the loose "values" and process as a leaf. Then merge that ColumnSet with
+    the ColumnSet resulting from stacking the containers.
+"""
 function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
     arr = get_data(step)
     name = get_name(step)
@@ -161,7 +176,6 @@ function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C
     if !all_containers
         push!(instruction_stack, merge_instruction(name, 2, level))
         loose_values = [e for (f,e) in zip(is_container_mask, arr) if !f]
-        t = typeof(loose_values)
         push!(instruction_stack, wrap_object(:unnamed, loose_values, level+1, path_node, leaf))
     end
 
@@ -173,15 +187,21 @@ function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C
     end
 end
 
-# Unpack a name-value pair object
+"""
+    process_dict!(step::UnpackStep, instruction_stack)
+
+Handle a NameValuePair container (struct or dict) by calling process on all values with a 
+new UnpackStep that has a name matching the key. If ColumnDefinitions are provided, then
+only grab the keys that apply and add default columns where a key is missing.
+"""
 function process_dict!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
     data = get_data(step)
     level = get_level(step)
-    col_defs_provided = !(C <: Union{Nothing, SimpleNode})
+    column_defs_provided = !(C <: Union{Nothing, SimpleNode})
     path_node = get_path_node(step)
     data_names = get_names(data)
 
-    child_nodes = col_defs_provided ? children(path_node) : SimpleNode.(data_names)
+    child_nodes = column_defs_provided ? get_children(path_node) : SimpleNode.(data_names)
 
     names_num = length(child_nodes)
     if names_num == 0
@@ -213,7 +233,11 @@ function process_dict!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
 end
 
 ###########
-
+"""
+    merge_cols!(step, column_stack)
+Take N ColumnSets from the column_stack and merge them. This means repeating the values of
+each ColumnSet such that you get the Cartesian Product of their join.
+"""
 function merge_cols!(step, column_stack)
     col_set = pop!(column_stack)
     multiplier = 1
@@ -237,6 +261,11 @@ function merge_cols!(step, column_stack)
     return nothing
 end
 
+"""
+    stack_cols!(step, column_stack, default_col)
+Take the ColumnSets that were created by processing the elements of an array and stack them together.
+If a column name is present in one set but not in the other, then insert a default column.
+"""
 function stack_cols!(step, column_stack, default_col)
     columns_to_stack = @view column_stack[end-get_data(step)+1:end]
     prepend_name!.(columns_to_stack, Ref(get_name(step)), get_level(step))

@@ -96,7 +96,6 @@ function make_path_nodes!(column_defs, level = 1)
                 NestedIterator(get_default_value(without_child));
                 col_name=get_column_name(without_child))
             push!(child_nodes, value_column_node)
-            append_name!(without_child, :unnamed)
         end
 
         nodes[i] = PathNode(unique_name, child_nodes)
@@ -106,5 +105,5 @@ end
 
 
 """Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(col_defs::Vector{ColumnDefinition}) = PathNode(:TOP_LEVEL, make_path_nodes!(col_defs))
+make_path_graph(column_defs::Vector{ColumnDefinition}) = PathNode(:TOP_LEVEL, make_path_nodes!(column_defs))
 make_path_graph(::Nothing; _...) = nothing
