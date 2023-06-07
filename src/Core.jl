@@ -132,7 +132,7 @@ function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C
         # If we have column defs, but the array is empty, that means we need to make a 
         # missing column_set
         next_step = !(C <: Union{SimpleNode, Nothing}) ?
-            column_set_step(make_missing_column_set(path_node, level)) :
+            column_set_step(make_missing_column_set(path_node)) :
             default_object(name, level, path_node)
         push!(instruction_stack, next_step)
         return nothing
@@ -202,7 +202,7 @@ function process_dict!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
             wrap_object(name, child_data, level+1, child_node)
         # CASE 2: Expected a child node, but don't find it 
         elseif should_have_child && !data_has_name
-            column_set_step(make_missing_column_set(child_node, level+1))
+            column_set_step(make_missing_column_set(child_node))
         # CASE 3: We don't expect a child node: wrap any value in a new column
         elseif !should_have_child
             wrap_object(name, child_data, level+1, child_node, leaf)
