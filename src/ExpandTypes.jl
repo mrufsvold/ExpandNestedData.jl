@@ -89,8 +89,3 @@ function make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, nam
 end
 is_current_name(column_def::ColumnDefinition, name, level) = current_path_name(column_def, level) == name
 has_more_keys(column_def, level) = level < length(get_field_path(column_def))
-function append_name!(def, name)
-    new_field_path = tuple(get_field_path(def)..., name)
-    def.field_path = new_field_path
-    return def
-end
