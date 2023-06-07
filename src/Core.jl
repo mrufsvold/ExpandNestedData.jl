@@ -154,7 +154,7 @@ function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C
     elseif element_count == 1
         push!(instruction_stack, wrap_object(name, first(arr), level, path_node))
         return nothing
-    elseif is_value_type(eltype(T))
+    elseif all_eltypes_are_values(T)
         push!(instruction_stack, column_set_step(init_column_set(arr, name, level)))
         return nothing
     end
