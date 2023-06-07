@@ -11,21 +11,20 @@ struct ExpandedTable
 end
 
 """Construct an ExpandedTable from the results of `create_columns`"""
-function ExpandedTable(columns::Dict{K, T}, column_defs::Vector{ColumnDefinition}; lazy_columns, column_style, kwargs...) where {K, T<: NestedIterator{<:Any}}
-    path_graph = make_path_graph(column_defs)
+function ExpandedTable(columns::Dict{K, T}, path_graph; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
-        column_name(def) => field_path(def)
-        for def in column_defs
+        get_final_name(val_node) => get_field_path(val_node)
+        for val_node in get_all_value_nodes(path_graph)
     )
-    expanded_table = ExpandedTable(col_lookup, column_tuple)
+    return ExpandedTable(col_lookup, column_tuple)
 end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
 function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
     kvs = []
-    for child in children(path_graph)
+    for child in get_children(path_graph)
         push!(kvs, Symbol(get_name(child)) => make_column_tuple(columns, child, lazy_columns))
     end
 
@@ -33,11 +32,11 @@ function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::
     return Table(children_tuple)
 end
 function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
-    lazy_column = columns[field_path(path_graph)]
-    value_column =  lazy_columns ? lazy_column : collect(lazy_column, pool_arrays(path_graph))
-    if length(children(path_graph)) > 0
+    lazy_column = columns[get_field_path(path_graph)]
+    value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
+    if length(get_children(path_graph)) > 0
         d = Dict(:unnamed => value_column)
-        for child in children(path_graph)
+        for child in get_children(path_graph)
             d[Symbol(get_name(child))] = make_column_tuple(columns, child, lazy_columns)
         end
         return Table(NamedTuple(d))

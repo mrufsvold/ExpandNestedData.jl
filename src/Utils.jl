@@ -1,12 +1,11 @@
-"""Check if any elements in an iterator are subtypes of NameValueContainer"""
-function has_namevaluecontainer_element(itr)
-    if eltype(itr) == Any
-        return itr .|> eltype .|> is_NameValueContainer |> any
-    else
-        return itr |> eltype |> get_member_types .|> is_NameValueContainer |> any
+"""Check if the eltype of a T are all value types (i.e. not containers)"""
+all_eltypes_are_values(::Type{T}) where T = all_is_value_type(eltype(T))
+function all_is_value_type(::Type{T}) where T
+    if T isa Union
+        return all(is_value_type.(Base.uniontypes(T)))
     end
+    return is_value_type(T)
 end
-get_member_types(::Type{T}) where T = T isa Union ? Base.uniontypes(T) : [T]
 
 
 """Get the keys/names of any NameValueContainer"""
