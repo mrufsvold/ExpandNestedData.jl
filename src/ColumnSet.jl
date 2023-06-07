@@ -79,9 +79,9 @@ get_column(cols::ColumnSet, name, default::NestedIterator) = name in keys(cols) 
 
 
 """Return a missing column for each member of a child path"""
-function make_missing_column_set(path_node, current_index)
+function make_missing_column_set(path_node)
     missing_column_set =  Dict(
-        path_to_value(value_node, current_index) => get_default(value_node)
+        field_path(value_node) => get_default(value_node)
         for value_node in get_all_value_nodes(path_node)
     )
     return missing_column_set
