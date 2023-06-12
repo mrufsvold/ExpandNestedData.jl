@@ -57,11 +57,6 @@ function get_all_value_nodes(node::T, ch) where {T}
 end
 
 
-
-"""
-SIDE EFFECT: also appends :unnamed to any column defs that stop at a pathnode to capture any
-loose values in an array at that level
-"""
 function make_path_nodes!(column_defs, level = 1)
     unique_names = get_unique_current_names(column_defs, level)
     nodes = Vector{AbstractPathNode}(undef, length(unique_names))
@@ -91,8 +86,8 @@ function make_path_nodes!(column_defs, level = 1)
             without_child_idx = findfirst(identity, are_value_nodes)
             without_child = matching_defs[without_child_idx]
             value_column_node = ValueNode(
-                :unnamed, 
-                (get_field_path(without_child)..., :unnamed), 
+                unnamed, 
+                (get_field_path(without_child)..., unnamed), 
                 get_pool_arrays(without_child),
                 NestedIterator(get_default_value(without_child));
                 col_name=get_column_name(without_child))

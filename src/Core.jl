@@ -185,7 +185,7 @@ function process_array!(step::UnpackStep{T,C}, instruction_stack, csm) where {T,
         child_nodes = get_children(path_node)
         # for path nodes, we need to check if there is :unnamed (indicating that there should be loose values)
         # if so, override all_containers so we check for loose
-        if any(:unnamed == get_name(n) for n in child_nodes)
+        if any(unnamed == get_name(n) for n in child_nodes)
             all_containers = false
         else
         # otherwise, we ignore any non-containers
@@ -205,7 +205,7 @@ function process_array!(step::UnpackStep{T,C}, instruction_stack, csm) where {T,
         loose_values = [e for (f,e) in zip(is_container_mask, arr) if !f]
         next_step = length(loose_values) == 0 ?
             missing_column_set_step(csm, path_node) :
-            wrap_object(cons(unnamed, name), loose_values, path_node, leaf)
+            wrap_object(cons(unnamed_id, name), loose_values, path_node, leaf)
         push!(instruction_stack, next_step)
     end
 
@@ -232,7 +232,7 @@ function process_dict!(step::UnpackStep{<:Any,C}, instruction_stack, csm) where 
     data_names = get_names(data)
 
     child_nodes = column_defs_provided ? 
-        [c for c in get_children(path_node) if get_name(c) != :unnamed] : 
+        [c for c in get_children(path_node) if get_name(c) != unnamed] : 
         (SimpleNode(n) for n in data_names)
 
     names_num = length(child_nodes)
@@ -244,9 +244,6 @@ function process_dict!(step::UnpackStep{<:Any,C}, instruction_stack, csm) where 
 
     for child_node in child_nodes
         name = get_name(child_node)
-        if name == :unnamed
-            continue
-        end
         name_id = cons(get_id(csm, name), parent_name)
         # both are always true when unguided
         should_have_child = !(child_node isa ValueNode)

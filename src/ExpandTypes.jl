@@ -62,7 +62,7 @@ function ColumnDefinition(field_path; kwargs...)
 end
 function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
     if column_name isa Nothing
-        path = last(field_path) == :unnamed ? field_path[1:end-1] : field_path
+        path = last(field_path) == unnamed ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
