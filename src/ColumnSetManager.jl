@@ -1,10 +1,14 @@
 """A null "name" for the top level input"""
 const top_level = Nil{Int64}()
-"""unnamed is the """
+"""the id for unnamed key. This happens when an array has loose values and containers"""
 const unnamed_id = 1
+"""the name to use for unnamed keys"""
 const unnamed = :expand_nested_data_unnamed
-const empty_column = NestedIterator()
 
+"""
+The ColumnSetManager creates IDs and stores for keys in the input data and for full field paths.
+It also keeps ColumnSets that are no longer in use and recycles them when a new ColumnSet is needed
+"""
 struct ColumnSetManager
     name_to_id::OrderedRobinDict{Any, Int64}
     id_generator::Channel{Int64}
@@ -24,6 +28,10 @@ function ColumnSetManager()
     return ColumnSetManager(name_to_id, id_generator, column_sets)
 end
 
+"""
+    get_id(csm::ColumnSetManager, name)
+Get an id for a new or existing name within a field path
+"""
 function get_id(csm::ColumnSetManager, name)
     if haskey(csm.name_to_id, name)
         return csm.name_to_id[name]
@@ -56,16 +64,27 @@ function get_id_for_path(csm::ColumnSetManager, field_path::Tuple)
     return id
 end
 
+"""
+    get_name(csm::ColumnSetManager, id)
+Return the name associated with an id
+"""
 function get_name(csm::ColumnSetManager, id)
     return csm.name_to_id.keys[id]
 end
 
-
+"""
+    reconstruct_field_path(csm::ColumnSetManager, id)
+Given an id for a field_path, reconstruct a tuple of actual names
+"""
 function reconstruct_field_path(csm::ColumnSetManager, id)
     id_path = get_name(csm, id)
-    return tuple((get_name(csm, name_id) for name_id in id_path)...)
+    return tuple((Symbol(get_name(csm, name_id)) for name_id in id_path)...)
 end
 
+"""
+    get_column_set(csm::ColumnSetManager)
+Get a new ColumnSet from the manager
+"""
 function get_column_set(csm::ColumnSetManager)
     col_set = if !isempty(csm.column_sets)
         pop!(csm.column_sets)
@@ -75,17 +94,29 @@ function get_column_set(csm::ColumnSetManager)
     return col_set
 end
 
+"""
+    free_column_set!(csm::ColumnSetManager, column_set::ColumnSet)
+Return a ColumnSet so that it can be recycled in future `get_column_set` calls
+"""
 function free_column_set!(csm::ColumnSetManager, column_set::ColumnSet)
     empty!(column_set)
     push!(csm.column_sets, column_set)
 end
 
+"""
+    Base.merge!(csm::ColumnSetManager, cs1, cs2)    
+Merge cs2 into cs1 and free cs2
+"""
 function Base.merge!(csm::ColumnSetManager, cs1, cs2)
     merge!(cs1, cs2)
     free_column_set!(csm, cs2)
     return cs1
 end
 
+"""
+    init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
+Create a new ColumnSet containing an id for name and a NestedIterator around data
+"""
 function init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
     col = NestedIterator(data)
     cs = get_column_set(csm)
@@ -94,6 +125,10 @@ function init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
     return cs
 end
 
+"""
+    build_final_column_set(csm::ColumnSetManager, raw_cs)
+Take a ColumnSet with ID keys and reconstruct a column_set with actual names keys
+"""
 function build_final_column_set(csm::ColumnSetManager, raw_cs)
     # todo -- we could track the longest field_path and then make the tuple length known
     # todo -- can the final columnset be changed to symbols at this point?
@@ -105,16 +140,10 @@ function build_final_column_set(csm::ColumnSetManager, raw_cs)
     return final_cs
 end
 
-
-
-function get_unique_names(vec_of_col_sets)
-    unique_names = IntSet()
-    for col_set in vec_of_col_sets
-        push!(unique_names, keys(col_set)...)
-    end
-    return unique_names
-end
-
+"""
+    get_total_length(vec_of_col_sets)
+Add up the column_length of all columns in a vector
+"""
 function get_total_length(vec_of_col_sets)
     len = 0
     for col_set in vec_of_col_sets
@@ -161,11 +190,14 @@ function cols_to_length(val, longest)
     return cycle(val, catchup_mult)
 end
 
+"""
+    get_first_key(cs::ColumnSet)
+Return the lowest value id key from a columnset
+"""
 get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : typemax(Int64)
 
 """
-get_column!(cols::ColumnSet, name, default::NestedIterator)
-
+    get_column!(cols::ColumnSet, name, default::NestedIterator)
 Get a column from a set with a given name, if no column with that name is found
 construct a new column with same length as column set
 """

@@ -80,12 +80,31 @@ function current_path_name(c::ColumnDefinition, level)
     fp = get_field_path(c)
     return fp[level]
 end
+
+"""
+    get_unique_current_names(defs, level)
+Get all unique names for the given depth level for a list of ColumnDefinitions
+"""
 get_unique_current_names(defs, level) = unique((current_path_name(def, level) for def in defs))
+
+"""
+    make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, level)
+Return a column definitions that have children for the given name at the given level.
+"""
 function make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, level)
-    return filter(
+    mask = findall(
         def -> is_current_name(def, name, level) && length(get_field_path(def)) > level, 
         column_defs
         )
+    return view(column_defs, mask)
 end
+"""
+    is_current_name(column_def::ColumnDefinition, name, level)
+Check if name matches the field path for column_def at level
+"""
 is_current_name(column_def::ColumnDefinition, name, level) = current_path_name(column_def, level) == name
+"""
+    has_more_keys(column_def, level)
+Check if there are more keys in the field path below the given level
+"""
 has_more_keys(column_def, level) = level < length(get_field_path(column_def))

@@ -33,6 +33,8 @@ end
 """Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
 
+
+# Doing some type piracy to patch a bug in DataStructures.jl
 function Base.setindex!(h::OrderedRobinDict{K, V}, v0, key0) where {K,V}
     key = convert(K, key0)
     v = convert(V, v0)
