@@ -1,7 +1,7 @@
 name = "ExpandNestedData"
 uuid = "8a7d223a-a7dc-4abf-8bc1-b0ce2ace9adc"
 authors = ["Micah Rufsvold <mjrufsvold@protonmail.com>"]
-version = "1.0.0"
+version = "1.1.0"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
