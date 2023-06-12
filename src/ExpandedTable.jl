@@ -1,6 +1,3 @@
-using Tables
-using TypedTables
-
 @enum ColumnStyle flat_columns nested_columns
 
 get_column_style(s::Symbol) = (flat=flat_columns, nested=nested_columns)[s]
@@ -11,7 +8,7 @@ struct ExpandedTable
 end
 
 """Construct an ExpandedTable from the results of `create_columns`"""
-function ExpandedTable(columns::Dict{K, T}, path_graph; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
+function ExpandedTable(columns::OrderedRobinDict{K, T}, path_graph; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
     col_lookup = Dict(
         get_final_name(val_node) => get_field_path(val_node)
@@ -34,13 +31,6 @@ end
 function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
     lazy_column = columns[get_field_path(path_graph)]
     value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
-    if length(get_children(path_graph)) > 0
-        d = Dict(:unnamed => value_column)
-        for child in get_children(path_graph)
-            d[Symbol(get_name(child))] = make_column_tuple(columns, child, lazy_columns)
-        end
-        return Table(NamedTuple(d))
-    end
     return value_column
 end
 

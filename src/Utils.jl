@@ -33,3 +33,20 @@ end
 """Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
 
+function Base.setindex!(h::OrderedRobinDict{K, V}, v0, key0) where {K,V}
+    key = convert(K, key0)
+    v = convert(V, v0)
+    index = get(h.dict, key, -2)
+
+    if index < 0
+        DataStructures._setindex!(h, v0, key0)
+    else
+        @assert haskey(h, key0)
+        @inbounds orig_v = h.vals[index]
+        !isequal(orig_v, v0) && (@inbounds h.vals[index] = v0)
+    end
+
+    DataStructures.check_for_rehash(h) && DataStructures.rehash!(h)
+
+    return h
+end

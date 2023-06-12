@@ -1,6 +1,10 @@
 module ExpandNestedData
 using PooledArrays
 using StructTypes
+using DataStructures
+using DataStructures: Stack, OrderedRobinDict, list, cons, Cons, Nil, IntSet
+# using Tables
+using TypedTables: Table
 
 export expand
 export ColumnDefinition

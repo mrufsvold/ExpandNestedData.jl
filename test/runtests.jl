@@ -3,6 +3,7 @@ using Test
 using JSON3
 using ExpandNestedData
 using TypedTables
+using DataStructures: OrderedRobinDict
 
 EN = ExpandNestedData
 
@@ -14,6 +15,21 @@ function fieldsequal(o1, o2)
     for name in fieldnames(typeof(o1))
         prop1 = getproperty(o1, name)
         prop2 = getproperty(o2, name)
+        if !fieldequal(prop1, prop2)
+            println("Didn't match on $name. Got $prop1 and $prop2")
+            return false
+        end
+    end
+    return true
+end
+function fieldsequal(o1::NamedTuple, o2::NamedTuple)
+    for name in keys(o1)
+        prop1 = getindex(o1, name)
+        prop2 = getindex(o2, name)
+
+        if prop1 isa NamedTuple && prop2 isa NamedTuple
+            return fieldsequal(prop1, prop2)
+        end
         if !fieldequal(prop1, prop2)
             println("Didn't match on $name. Got $prop1 and $prop2")
             return false
@@ -44,22 +60,24 @@ end
     @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
     @test [1,2,1,2] == collect(ExpandNestedData.stack(iter1, iter1))
     col_set = ExpandNestedData.ColumnSet(
-        (:a,) => ExpandNestedData.NestedIterator([1,2]),
-        (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
+        1 => ExpandNestedData.NestedIterator([1,2]),
+        2 => ExpandNestedData.NestedIterator([3,4,5,6]),
     )
-    @test isequal(
+    @test fieldsequal(
             ExpandNestedData.cycle_columns_to_length!(col_set),
             ExpandNestedData.ColumnSet(
-                (:a,) => ExpandNestedData.NestedIterator([1,2,1,2]),
-                (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
+                1 => ExpandNestedData.NestedIterator([1,2,1,2]),
+                2 => ExpandNestedData.NestedIterator([3,4,5,6]),
             )
         )
-
-    col_set = ExpandNestedData.ColumnSet(
-            (:a,) => ExpandNestedData.NestedIterator([1,2]),
-            (:b,) => ExpandNestedData.NestedIterator([3,4,5,6]),
-        )
     @test fieldsequal(ExpandNestedData.ColumnDefinition((:a,)), ExpandNestedData.ColumnDefinition([:a]))
+end
+
+@testset "DataStructure Internals" begin
+    d = OrderedRobinDict(:a => 1, :b => 2)
+    k = d.keys
+    @test k isa Vector{Symbol}
+    @test k[2] == :b
 end
 
 
@@ -107,8 +125,8 @@ const heterogenous_level_test_body = Dict(
     @test eltype(actual_simple_table.data_D) == Int64
 
     # Expanding Arrays
-    actual_expanded_table = EN.expand(test_body)
     @test begin
+        actual_expanded_table = EN.expand(test_body)
         expected_table_expanded = (
             a_b=[1,2,3,4,missing], 
             a_c=[2,missing,1,1, missing], 
@@ -129,10 +147,7 @@ const heterogenous_level_test_body = Dict(
     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
         typeof(PooledArray(Int64[])))
     
-    @test fieldsequal(
-        EN.expand(struct_body; column_style=:nested) |> rows |> last,
-        (a=(b=1,c=2), d=4)
-    )
+    @test fieldsequal((EN.expand(struct_body; column_style=:nested) |> rows |> last), (a=(b=1,c=2), d=4))
 
     @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 

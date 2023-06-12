@@ -1,18 +1,18 @@
 @enum StepType dict arr leaf default merge_cols stack_cols columns
 
 struct ExpandMissing end
-struct UnpackStep{N,T,C}
+struct UnpackStep{T,C}
     type::StepType
-    name::N
+    name::Union{Nil{Int64},Cons{Int64}}
     data::T
-    level::Int64
     path_node::C
 end
 get_step_type(u::UnpackStep) = u.type
 get_name(u::UnpackStep) = u.name
 get_data(u::UnpackStep) = u.data
-get_level(u::UnpackStep) = u.level
 get_path_node(u::UnpackStep) = u.path_node
+
+const no_step_name = list(-1)
 
 """NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
 contents without worrying about `getkey` or `getproperty`, etc.
@@ -68,7 +68,7 @@ function ColumnDefinition(field_path::T; column_name=nothing, default_value=miss
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
-    column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
+    column_name = haskey(column_names, field_path) ? column_names[field_path] : nothing
     ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
 end
 function construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)

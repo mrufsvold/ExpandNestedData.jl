@@ -13,7 +13,6 @@ end
 struct ValueNode <: AbstractPathNode
     name
     final_name::Symbol
-    children::Vector{AbstractPathNode}
     field_path::Tuple
     pool_arrays
     default::NestedIterator
@@ -24,8 +23,10 @@ struct SimpleNode <: AbstractPathNode
     name
 end
 function ValueNode(name, field_path, pool_arrays, default; col_name)
-    ValueNode(name, col_name, ValueNode[], field_path, pool_arrays,default)
+    ValueNode(name, col_name, field_path, pool_arrays,default)
 end
+const NoNode = SimpleNode(nothing)
+
 
 get_children(n::AbstractPathNode) = n.children
 get_name(n::AbstractPathNode) = n.name
