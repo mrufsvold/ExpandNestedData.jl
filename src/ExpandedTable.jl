@@ -19,17 +19,23 @@ end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
-function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
+function make_column_tuple(col_set, node::Node, lazy_columns::Bool)
+    return @cases node begin
+        [Path,Value](n) => make_column_tuple(col_set, n, lazy_columns)
+        Simple => throw(ErrorException("there should be no simple nodes when building the column tuple"))
+    end
+end
+function make_column_tuple(col_set, path_graph::AbstractPathNode, lazy_columns::Bool)
     kvs = []
     for child in get_children(path_graph)
-        push!(kvs, Symbol(get_name(child)) => make_column_tuple(columns, child, lazy_columns))
+        push!(kvs, Symbol(get_name(child)) => make_column_tuple(col_set, child, lazy_columns))
     end
 
     children_tuple = NamedTuple(kvs)
     return Table(children_tuple)
 end
-function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
-    lazy_column = columns[get_field_path(path_graph)]
+function make_column_tuple(col_set, path_graph::ValueNode, lazy_columns::Bool)
+    lazy_column = col_set[get_field_path(path_graph)]
     value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
     return value_column
 end

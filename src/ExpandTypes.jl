@@ -1,48 +1,3 @@
-@enum StepType dict arr leaf default merge_cols stack_cols columns
-
-@sum_type NameList :hidden begin
-    Empty(::Nil{Int64})
-    Head(::Cons{Int64})
-end
-
-@sum_type UnpackStep :hidden begin
-                #name, data, path_node
-    dict(::NameList, ::NameValueContainer, ::Node)
-    array(::NameList, ::AbstractArray, ::Node)
-    leaf(::NameList, ::Any)
-    default(::NameList, ::Node)
-                #name, num_columns
-    merge_cols(::NameList, ::Int64)
-    stack_cols(::NameList, ::Int64)
-    columns(::ColumnSet)
-end
-
-struct ExpandMissing end
-# struct UnpackStep{T,C}
-#     type::StepType
-#     name::Union{Nil{Int64},Cons{Int64}}
-#     data::T
-#     path_node::C
-# end
-function get_name(u::UnpackStep)
-    name = @cases u begin
-        [dict,array,](n,d,p) => n
-        [leaf,default,merge_cols,stack_cols](n,d) => n 
-        columns => throw(ErrorException("columns step has no name"))
-    end
-    return name
-end
-function get_data(u::UnpackStep)
-    data = @cases u begin
-        [dict,array,](n,d,p) => d
-        [leaf,default,merge_cols,stack_cols](n,d) => d
-        columns(c) => c
-    end
-end
-get_path_node(u::UnpackStep) = u.path_node
-
-const no_step_name = list(-1)
-
 """NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
 contents without worrying about `getkey` or `getproperty`, etc.
 """
@@ -52,6 +7,57 @@ Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayT
 is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
+
+
+@sum_type NameList :hidden begin
+    Empty(::Nil{Int64})
+    Head(::Cons{Int64})
+end
+function NameList(i::Int64, tail::NameList)
+    return @cases tail begin
+        [Empty,Head](t) => NameList'.Head(cons(i, t))
+    end
+end
+
+@sum_type UnpackStep :hidden begin
+                #name, data, path_node
+    dict(::NameList, ::Any, ::Node)
+    arr(::NameList, ::AbstractArray, ::Node)
+    leaf(::NameList, ::Any)
+    default(::NameList)
+                #num_columns
+    merge_cols(::Int64)
+    stack_cols(::Int64)
+    columns(::ColumnSet)
+end
+
+leaf_step(n,d,::Any) = UnpackStep'.leaf(n,d)
+
+struct ExpandMissing end
+
+function get_name(u::UnpackStep)
+    name = @cases u begin
+        [dict,arr](n,d,p) => n
+        [leaf,default,merge_cols,stack_cols](n,d) => n 
+        columns => throw(ErrorException("columns step has no name"))
+    end
+    return name
+end
+function get_data(u::UnpackStep)
+    data = @cases u begin
+        [dict,arr](n,d,p) => d
+        [leaf,default,merge_cols,stack_cols](n,d) => d
+        columns(c) => c
+    end
+    return data
+end
+function get_path_node(u::UnpackStep)
+    node = @cases u begin
+        [dict,arr](n,d,p) => p
+        [leaf,default,merge_cols,stack_cols, columns] => throw(ErrorException("step does not contain a path node"))
+    end
+    node
+end
 
 ##### ColumnDefinition #####
 ############################
@@ -91,7 +97,7 @@ function ColumnDefinition(field_path; kwargs...)
 end
 function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
     if column_name isa Nothing
-        path = last(field_path) == unnamed ? field_path[1:end-1] : field_path
+        path = last(field_path) == unnamed() ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)

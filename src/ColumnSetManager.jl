@@ -1,29 +1,23 @@
 """A null "name" for the top level input"""
-const top_level = Nil{Int64}()
+top_level() = NameList'.Empty(Nil{Int64}())
 """the id for unnamed key. This happens when an array has loose values and containers"""
-const unnamed_id = 1
+unnamed_id() = 1
 """the name to use for unnamed keys"""
-const unnamed = :expand_nested_data_unnamed
+unnamed() = :expand_nested_data_unnamed
 
 """
 The ColumnSetManager creates IDs and stores for keys in the input data and for full field paths.
 It also keeps ColumnSets that are no longer in use and recycles them when a new ColumnSet is needed
 """
-struct ColumnSetManager
+struct ColumnSetManager{T}
     name_to_id::OrderedRobinDict{Any, Int64}
-    id_generator::Channel{Int64}
+    id_generator::T
     column_sets::Stack{ColumnSet}
 end
 
 function ColumnSetManager()
-    name_to_id = OrderedRobinDict{Any, Int64}(unnamed => unnamed_id)
-    id_generator = Channel{Int64}() do ch
-        i = 2
-        while true
-            put!(ch, i)
-            i +=1
-        end
-    end
+    name_to_id = OrderedRobinDict{Any, Int64}(unnamed() => unnamed_id())
+    id_generator = Iterators.Stateful(Iterators.countfrom(2))
     column_sets = Stack{ColumnSet}()
     return ColumnSetManager(name_to_id, id_generator, column_sets)
 end
@@ -36,7 +30,7 @@ function get_id(csm::ColumnSetManager, name)
     if haskey(csm.name_to_id, name)
         return csm.name_to_id[name]
     end
-    id = take!(csm.id_generator)
+    id = first(csm.id_generator)
     csm.name_to_id[name] = id
     return id
 end
@@ -46,7 +40,11 @@ end
 
 Get an id for the linked list of ids that constitute a field path in the core loop
 """
-function get_id(csm::ColumnSetManager, field_path::Cons{Int64})
+function get_id(csm::ColumnSetManager, name_list::NameList)
+    field_path = @cases name_list begin
+        Head(f) => f 
+        Empty => throw(ErrorException("Cannot create an ID for an empty list"))
+    end
     # need to reverse field path because we stack the last on top as we descend through the data structure
     path_tuple = tuple((i for i in reverse(field_path))...)
     return get_id(csm, path_tuple)
@@ -117,7 +115,7 @@ end
     init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
 Create a new ColumnSet containing an id for name and a NestedIterator around data
 """
-function init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
+function init_column_set(csm::ColumnSetManager, name::NameList, data)
     col = NestedIterator(data)
     cs = get_column_set(csm)
     id = get_id(csm, name)
@@ -211,7 +209,7 @@ end
 
 
 """Return a missing column for each member of a child path"""
-function make_missing_column_set(csm, path_node)
+function make_missing_column_set(csm, path_node::Node)
     missing_column_set = get_column_set(csm)
 
     for value_node in get_all_value_nodes(path_node)
