@@ -1,15 +1,44 @@
 @enum StepType dict arr leaf default merge_cols stack_cols columns
 
-struct ExpandMissing end
-struct UnpackStep{T,C}
-    type::StepType
-    name::Union{Nil{Int64},Cons{Int64}}
-    data::T
-    path_node::C
+@sum_type NameList :hidden begin
+    Empty(::Nil{Int64})
+    Head(::Cons{Int64})
 end
-get_step_type(u::UnpackStep) = u.type
-get_name(u::UnpackStep) = u.name
-get_data(u::UnpackStep) = u.data
+
+@sum_type UnpackStep :hidden begin
+                #name, data, path_node
+    dict(::NameList, ::NameValueContainer, ::Node)
+    array(::NameList, ::AbstractArray, ::Node)
+    leaf(::NameList, ::Any)
+    default(::NameList, ::Node)
+                #name, num_columns
+    merge_cols(::NameList, ::Int64)
+    stack_cols(::NameList, ::Int64)
+    columns(::ColumnSet)
+end
+
+struct ExpandMissing end
+# struct UnpackStep{T,C}
+#     type::StepType
+#     name::Union{Nil{Int64},Cons{Int64}}
+#     data::T
+#     path_node::C
+# end
+function get_name(u::UnpackStep)
+    name = @cases u begin
+        [dict,array,](n,d,p) => n
+        [leaf,default,merge_cols,stack_cols](n,d) => n 
+        columns => throw(ErrorException("columns step has no name"))
+    end
+    return name
+end
+function get_data(u::UnpackStep)
+    data = @cases u begin
+        [dict,array,](n,d,p) => d
+        [leaf,default,merge_cols,stack_cols](n,d) => d
+        columns(c) => c
+    end
+end
 get_path_node(u::UnpackStep) = u.path_node
 
 const no_step_name = list(-1)

@@ -1,6 +1,11 @@
 ##### PathGraph #####
 #####################
 
+@sum_type Node :hidden begin
+    Path(::Any, ::Vector{Node})
+    Value(::Any, ::Symbol, ::Tuple, ::Bool, ::NestedIterator)
+end
+
 abstract type AbstractPathNode end
 
 """A node in the ColumnDefinition graph that has children"""
@@ -14,7 +19,7 @@ struct ValueNode <: AbstractPathNode
     name
     final_name::Symbol
     field_path::Tuple
-    pool_arrays
+    pool_arrays::Bool
     default::NestedIterator
 end
 

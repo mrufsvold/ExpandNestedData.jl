@@ -1,10 +1,10 @@
 module ExpandNestedData
-using PooledArrays
-using StructTypes
 using Base: merge!
 using DataStructures
 using DataStructures: Stack, OrderedRobinDict, list, cons, Cons, Nil, IntSet
-# using Tables
+using PooledArrays
+using StructTypes
+using SumTypes
 using TypedTables: Table
 
 export expand
