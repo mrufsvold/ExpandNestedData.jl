@@ -1,3 +1,7 @@
+is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
+is_container(t) = typeof(StructTypes.StructType(t)) <: Container
+is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
+
 """Check if the eltype of a T are all value types (i.e. not containers)"""
 all_eltypes_are_values(::Type{T}) where T = all_is_value_type(eltype(T))
 function all_is_value_type(::Type{T}) where T

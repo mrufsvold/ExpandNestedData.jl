@@ -1,6 +1,6 @@
 module ColumnDefinitions
 using ..ColumnSetManagers: ColumnSet, unnamed
-import ..current_path_name, ..join_names
+import ..join_names
 export ColumnDefinition, get_field_path, get_column_name, get_default_value, get_pool_arrays, make_column_def_child_copies, current_path_name
 
 

@@ -128,7 +128,23 @@ end
             @test collect(ExpandNestedData.make_column_def_child_copies([coldef], :a, 1)) == [coldef]
         end
 
+        @testset "Utils" begin
+            @test ExpandNestedData.all_eltypes_are_values(Vector{Union{Int64, String, Float64}})
+            @test !ExpandNestedData.all_eltypes_are_values(Vector{Union{Int64, String, AbstractFloat}})
+            @test !ExpandNestedData.all_eltypes_are_values(Vector{Union{Dict, String}})
+            d = Dict(:a => 1, :b => 2)
+            @test ExpandNestedData.get_names(d) == keys(d)
+            struct _T_
+                a
+            end
 
+            @test collect(ExpandNestedData.get_names(_T_(1))) == collect(fieldnames(_T_))
+            @test ExpandNestedData.get_value(d, :a, 3) == 1
+            @test ExpandNestedData.get_value(d, :c, 3) == 3
+            @test ExpandNestedData.get_value(_T_(1), :a, 3) == 1
+            @test ExpandNestedData.join_names((:a,1,"hi"), ".") == Symbol("a.1.hi")
+
+        end
 
 
     end
