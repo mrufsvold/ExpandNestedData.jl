@@ -1,6 +1,7 @@
 module ColumnSetManagers
 using DataStructures: OrderedRobinDict, Stack
 using ..NestedIterators
+import ..get_name
 export NameID, NameList, top_level, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length
 export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set
@@ -170,6 +171,9 @@ function get_id(csm::ColumnSetManager, name)
     csm.name_to_id[name] = id
     return id
 end
+
+get_id(csm::ColumnSetManager, name::NameID) = name
+    
 
 """
     get_id(csm::ColumnSetManager, field_path::Cons{Int64})

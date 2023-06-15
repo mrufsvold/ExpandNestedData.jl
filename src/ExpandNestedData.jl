@@ -18,15 +18,17 @@ NameValueContainer = Union{StructTypes.DictType, StructTypes.DataType}
 Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayType}
 struct ExpandMissing end
 
+function get_name end
+
 include("Utils.jl")
 include("NestedIterators.jl")
-using .NestedIterators
 include("ColumnSetManager.jl")
-using .ColumnSetManagers
 include("ColumnDefinitions.jl")
+include("PathGraph.jl")
+using .NestedIterators
+using .ColumnSetManagers
 using .ColumnDefinitions
-# include("Types.jl")
-# include("PathGraph.jl")
+using .PathGraph
 # include("ExpandTypes.jl")
 # include("ExpandedTable.jl")
 # include("Core.jl")

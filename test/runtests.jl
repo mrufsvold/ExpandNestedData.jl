@@ -52,6 +52,24 @@ function unordered_equal(t1, t2)
     len = length(t1[1])
     Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
 end
+
+function all_equal(arr)
+    if length(arr) == 1
+        return true
+    elseif length(arr) == 2
+        return @inbounds isequal(arr[1], arr[2])
+    end
+
+    matches = true
+    el = arr[1]
+    @inbounds for i in 2:length(arr)
+        matches = isequal(el, arr[i]) && matches
+        el = arr[i]
+    end
+    return matches
+end
+
+
 @testset "ExpandNestedData" begin
 
     @testset "Internals" begin
@@ -126,6 +144,23 @@ end
             @test coldef == ColumnDefinition((:a,:b), Symbol("a^b"), missing, false)
             @test ExpandNestedData.current_path_name(coldef, 2) == :b
             @test collect(ExpandNestedData.make_column_def_child_copies([coldef], :a, 1)) == [coldef]
+
+            csm = ExpandNestedData.ColumnSetManager()
+            simple = ExpandNestedData.SimpleNode(csm, :a)
+            value = ExpandNestedData.ValueNode(csm, :a, :a, (:a,), false, ExpandNestedData.NestedIterator([1]))
+            path_n = ExpandNestedData.PathNode(csm, :a, ExpandNestedData.Node[value])
+            @show ExpandNestedData.get_name.((simple,value,path_n))
+            @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
+            for (f,result) in ((
+                    ExpandNestedData.PathGraph.get_final_name, ExpandNestedData.NameID(2)), 
+                    (ExpandNestedData.PathGraph.get_field_path,ExpandNestedData.NameID(3)), 
+                    (ExpandNestedData.PathGraph.get_pool_arrays,false))
+                @test_throws ErrorException f(simple)
+                @test_throws ErrorException f(path_n)
+                @test f(value) == result
+            end
+
+            @test ExpandNestedData.get_all_value_nodes(path_n) == [value]
         end
 
         @testset "Utils" begin
@@ -143,7 +178,6 @@ end
             @test ExpandNestedData.get_value(d, :c, 3) == 3
             @test ExpandNestedData.get_value(_T_(1), :a, 3) == 1
             @test ExpandNestedData.join_names((:a,1,"hi"), ".") == Symbol("a.1.hi")
-
         end
 
 
