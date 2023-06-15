@@ -9,17 +9,17 @@ using SumTypes
 using TypedTables: Table
 
 # export expand
-# export ColumnDefinition
-# export nested_columns, flat_columns
+export ColumnDefinition
 
+include("Utils.jl")
 include("NestedIterators.jl")
 using .NestedIterators
 include("ColumnSetManager.jl")
 using .ColumnSetManagers
-# include("Utils.jl")
+include("ColumnDefinitions.jl")
+using .ColumnDefinitions
 # include("Types.jl")
 # include("PathGraph.jl")
-# include("ColumnSet.jl")
 # include("ExpandTypes.jl")
 # include("ExpandedTable.jl")
 # include("Core.jl")
