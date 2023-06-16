@@ -51,34 +51,6 @@ function expand(data, column_definitions=nothing;
     return final_table
 end
 
-"""Wrap an object in the correct UnpackStep"""
-function wrap_object(name, data::T, path_node::Node, step_type::S=nothing) where {T,S}
-    @debug "running wrap object" dtype=T name=name
-    if T <: ExpandMissing
-        @debug "got missing path for" name=name
-        return UnpackStep'.default(name)
-    elseif !(S <: Nothing)
-        @debug "enforced step_type" step_type=step_type name=name
-        return step_type(name, data, path_node)
-    end
-    struct_t = typeof(StructTypes.StructType(T))
-    @debug "StructType calculated" t=struct_t
-    _step_type = if struct_t <: StructTypes.ArrayType
-        UnpackStep'.arr
-    elseif struct_t <: NameValueContainer
-        UnpackStep'.dict
-    else
-        leaf_step
-    end
-    @debug "wrapping step" step_type=_step_type
-    return _step_type(name, data, path_node)
-end
-
-# A couple predefined new column set step creators
-missing_column_set_step(csm, path_node) = UnpackStep'.columns(make_missing_column_set(csm, path_node))
-init_column_set_step(csm, name, data) = UnpackStep'.columns(init_column_set(csm, name, data))
-empty_column_set_step(csm) = UnpackStep'.columns(get_column_set(csm))
-
 function create_columns(data, path_graph, csm, default_value=missing)
     default_column = NestedIterator(default_value)
     @assert length(default_column) == 1 "The default value must have a length of 1. If you want the value to have a length, try wrapping in a Tuple with `(default_val,)`"
@@ -161,7 +133,8 @@ function process_dict!(parent_name, data, wrapped_node, instruction_stack, csm)
     for child_node in child_nodes
         name = get_name(child_node)
         @debug "getting information for child" name=name node=child_node
-        wrapped_path = NameList(get_id(csm, name), parent_name)
+        wrapped_path = add_link(csm, parent_name, )
+        NameList(get_id(csm, name), parent_name)
         child_data = get_value(data, name, ExpandMissing())
         @debug "child data retrieved" data=child_data
         data_has_name = name in data_names 
@@ -296,7 +269,7 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
         first_key = minimum(get_first_key, columns_to_stack)
         # todo... we could probably unzip this to avoid iterating twice
         matching_cols = [pop_column!(cs, first_key, default_col) for cs in columns_to_stack]
-        push!(new_column_set, first_key=>foldl(stack, matching_cols))
+        push!(new_column_set, first_key=>foldl(vcat, matching_cols))
         column_sets_exhausted = all(length(cs)==0 for cs in columns_to_stack)
     end
 
