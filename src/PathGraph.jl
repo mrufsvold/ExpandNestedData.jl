@@ -1,6 +1,6 @@
 module PathGraph
 using SumTypes
-using ..ColumnSetManagers: ColumnSetManager, NameID, get_id, unnamed_id, unnamed, top_level_id
+using ..ColumnSetManagers: ColumnSetManager, NameID, get_id, unnamed_id, unnamed, top_level_id, get_id_for_path
 using ..NestedIterators: NestedIterator
 using ..ColumnDefinitions
 using ..ColumnDefinitions:  ColumnDefinition, 
@@ -26,7 +26,7 @@ PathNode(csm::ColumnSetManager, name, children::Vector{Node}) = PathNode(get_id(
 PathNode(name::NameID, children::Vector{Node}) = Node'.Path(name, children)
 
 function ValueNode(csm::ColumnSetManager, name, final_name, field_path, pool_arrays::Bool, default::NestedIterator)
-    ValueNode(get_id(csm, name),  get_id(csm, final_name),  get_id(csm, field_path), pool_arrays, default)
+    ValueNode(get_id(csm, name),  get_id(csm, final_name),  get_id_for_path(csm, field_path), pool_arrays, default)
 end
 ValueNode(name::NameID, final_name::NameID, field_path::NameID, pool_arrays::Bool, default::NestedIterator) = Node'.Value(name, final_name, field_path, pool_arrays, Ref{NestedIterator{<:Any, <:Any}}(default))
 

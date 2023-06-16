@@ -181,6 +181,76 @@ end
             @test ExpandNestedData.join_names((:a,1,"hi"), ".") == Symbol("a.1.hi")
         end
 
+        @testset "Core" begin
+            csm = ExpandNestedData.ColumnSetManager()
+            name_list = ExpandNestedData.NameList(0)
+            node = ExpandNestedData.SimpleNode(ExpandNestedData.NameID(0))
+            col_num = 5
+            dict_step = ExpandNestedData.DictStep(name_list, Dict(), node)
+            array_step = ExpandNestedData.ArrayStep(name_list, [], node)
+            leaf_step = ExpandNestedData.LeafStep(name_list, 1)
+            default_step = ExpandNestedData.DefaultStep(name_list)
+            merge_step = ExpandNestedData.MergeStep(col_num)
+            stack_step = ExpandNestedData.StackStep(col_num)
+            col_step = ExpandNestedData.NewColumnSetStep(ExpandNestedData.get_column_set(csm))
+
+            # test get_name
+            for s in (dict_step, array_step, leaf_step, default_step)
+                @test ExpandNestedData.get_name(s) == name_list
+            end
+            for s in (merge_step, stack_step, col_step)
+                @test_throws ErrorException ExpandNestedData.get_name(s)
+            end
+
+            # test get_data
+            for (s,expected) in ((dict_step, Dict()),(array_step,[]),(leaf_step,1))
+                @test ExpandNestedData.get_data(s) == expected
+            end
+            for s in (default_step, merge_step, stack_step, col_step)
+                @test_throws ErrorException ExpandNestedData.get_data(s)
+            end
+
+            # test get_column_number
+            for s in (merge_step, stack_step)
+                @test ExpandNestedData.get_column_number(s) == col_num
+            end
+            for s in (default_step, dict_step,array_step,leaf_step, col_step)
+                @test_throws ErrorException ExpandNestedData.get_column_number(s)
+            end
+
+            # test get_path_node
+            for s in (dict_step,array_step)
+                @test ExpandNestedData.get_path_node(s) == node
+            end
+            for s in (default_step, leaf_step, col_step, merge_step, stack_step)
+                @test_throws ErrorException ExpandNestedData.get_path_node(s)
+            end
+
+             # test get_column_set
+             for s in (col_step,)
+                @test isequal(ExpandNestedData.get_column_set(s), ExpandNestedData.ColumnSet())
+            end
+            for s in (dict_step,array_step, default_step, leaf_step, merge_step, stack_step)
+                @test_throws ErrorException ExpandNestedData.get_column_set(s)
+            end
+
+            @test isequal(ExpandNestedData.get_column_set(ExpandNestedData.empty_column_set_step(csm)), ExpandNestedData.ColumnSet())
+            
+            @test begin 
+                column_defs = [
+                        ExpandNestedData.ColumnDefinition((:data,)),
+                        ExpandNestedData.ColumnDefinition((:data, :E))
+                    ]
+                path_graph = ExpandNestedData.PathGraph.make_path_graph(csm, column_defs)
+                actual_col_set = ExpandNestedData.make_missing_column_set(csm, path_graph)
+                expected_col_set = ExpandNestedData.ColumnSet(
+                    ExpandNestedData.get_id_for_path(csm, (:data, ExpandNestedData.unnamed)) => ExpandNestedData.NestedIterator([missing]),
+                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => ExpandNestedData.NestedIterator([missing])
+                )
+                isequal(actual_col_set, expected_col_set)
+            end
+
+        end
 
     end
 

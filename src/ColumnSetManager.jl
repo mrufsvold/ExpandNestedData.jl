@@ -360,20 +360,4 @@ function Base.pop!(cols::ColumnSet, name_id::NameID, default::NestedIterator)
 end
 
 
-# """Return a missing column for each member of a child path"""
-# function make_missing_column_set(csm, path_node::Node)
-#     missing_column_set = get_column_set(csm)
-
-#     for value_node in get_all_value_nodes(path_node)
-#         field_path = get_field_path(value_node)
-#         id = get_id_for_path(csm, field_path)
-#         missing_column_set[id] = get_default(value_node)
-#     end
-
-#     return missing_column_set
-# end
-
-
-
-
 end # ColumnSetManagers
