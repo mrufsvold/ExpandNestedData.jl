@@ -14,7 +14,7 @@ using ..ColumnDefinitions:  ColumnDefinition,
                             make_column_def_child_copies
 import ..get_name
 
-export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes
+export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes, get_default
 
 @sum_type Node :hidden begin
     Path(::NameID, ::Vector{Node})
@@ -67,7 +67,7 @@ end
 function get_default(node::Node)
     return @cases node begin 
         [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a default"))
-        Value(_,_,_,_,d) => p
+        Value(_,_,_,_,d) => d[]
     end
 end
 

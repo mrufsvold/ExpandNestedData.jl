@@ -161,6 +161,7 @@ end
             end
 
             @test ExpandNestedData.get_all_value_nodes(path_n) == [value]
+            @test ExpandNestedData.get_default(value) == ExpandNestedData.NestedIterator([1])
         end
 
         @testset "Utils" begin

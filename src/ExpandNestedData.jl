@@ -29,8 +29,7 @@ using .NestedIterators
 using .ColumnSetManagers
 using .ColumnDefinitions
 using .PathGraph
-# include("ExpandTypes.jl")
 # include("ExpandedTable.jl")
 # include("Core.jl")
-# include("CoreHelpers.jl")
+include("CoreHelpers.jl")
 end
