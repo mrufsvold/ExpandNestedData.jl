@@ -1,8 +1,19 @@
 module PathGraph
 using SumTypes
-using ..ColumnSetManagers: ColumnSetManager, NameID, get_id
+using ..ColumnSetManagers: ColumnSetManager, NameID, get_id, unnamed_id, unnamed, top_level_id
 using ..NestedIterators: NestedIterator
+using ..ColumnDefinitions
+using ..ColumnDefinitions:  ColumnDefinition, 
+                            get_unique_current_names, 
+                            get_field_path, 
+                            get_pool_arrays, 
+                            get_default_value, 
+                            get_column_name,
+                            has_more_keys,
+                            current_path_name,
+                            make_column_def_child_copies
 import ..get_name
+
 export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes
 
 @sum_type Node :hidden begin
@@ -41,13 +52,13 @@ function get_final_name(node::Node)
         Value(_,n,_,_,_) => n
     end
 end
-function get_field_path(node::Node)
+function ColumnDefinitions.get_field_path(node::Node)
     return @cases node begin 
         [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a field_path"))
         Value(_,_,p,_,_) => p
     end
 end
-function get_pool_arrays(node::Node)
+function ColumnDefinitions.get_pool_arrays(node::Node)
     return @cases node begin 
         [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a pool_arrays"))
         Value(_,_,_,p,_) => p
@@ -83,7 +94,7 @@ function get_all_value_nodes(node::Node, ch)
 end
 
 
-function make_path_nodes!(column_defs, level = 1)
+function make_path_nodes!(csm, column_defs::AbstractArray{ColumnDefinition}, level = 1)
     unique_names = get_unique_current_names(column_defs, level)
     nodes = Vector{Node}(undef, length(unique_names))
     for (i, unique_name) in enumerate(unique_names)
@@ -96,38 +107,37 @@ function make_path_nodes!(column_defs, level = 1)
         if all_value_nodes
             # If we got to a value node, there should only be one.
             def = first(matching_defs)
-            nodes[i] = wrap(ValueNode(
-                unique_name, get_field_path(def), get_pool_arrays(def), NestedIterator(get_default_value(def));
-                col_name = get_column_name(def)))
+            nodes[i] = ValueNode(
+                csm, unique_name, get_column_name(def), get_field_path(def), get_pool_arrays(def), NestedIterator(get_default_value(def))
+            )
             continue
         end
 
-        with_children = !mix_of_node_types ? 
-            matching_defs :
-            [def for (is_value, def) in zip(are_value_nodes, matching_defs) if !is_value]
+        with_children = view(matching_defs, .!are_value_nodes)
         children_column_defs = make_column_def_child_copies(with_children, unique_name, level)
 
-        child_nodes = make_path_nodes!(children_column_defs, level+1)
+        child_nodes = make_path_nodes!(csm, children_column_defs, level+1)
         if mix_of_node_types
             without_child_idx = findfirst(identity, are_value_nodes)
             without_child = matching_defs[without_child_idx]
             value_column_node = ValueNode(
-                unnamed(), 
-                (get_field_path(without_child)..., unnamed()), 
+                csm,
+                unnamed_id, 
+                get_column_name(without_child),
+                (get_field_path(without_child)..., unnamed), 
                 get_pool_arrays(without_child),
-                NestedIterator(get_default_value(without_child));
-                col_name=get_column_name(without_child))
-            push!(child_nodes, wrap(value_column_node))
+                NestedIterator(get_default_value(without_child))
+            )
+            push!(child_nodes, value_column_node)
         end
 
-        nodes[i] = wrap(PathNode(unique_name, child_nodes))
+        nodes[i] = PathNode(csm, unique_name, child_nodes)
     end
     return nodes
 end 
 
 
 """Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(column_defs) = wrap(PathNode(:TOP_LEVEL, make_path_nodes!(column_defs)))
-make_path_graph(::Nothing; _...) = wrap(SimpleNode(nothing))
+make_path_graph(csm, column_defs) = PathNode(top_level_id, make_path_nodes!(csm, column_defs))
 
 end

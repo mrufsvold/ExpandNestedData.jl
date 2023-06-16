@@ -69,7 +69,7 @@ get_unique_current_names(defs::AbstractArray{ColumnDefinition}, level) = unique(
 Return a column definitions that have children for the given name at the given level.
 """
 function make_column_def_child_copies(column_defs::AbstractArray{ColumnDefinition}, name, level::Int64)
-    mask = findall(
+    mask = map(
         def -> is_current_name(def, name, level) && length(get_field_path(def)) > level, 
         column_defs
         )

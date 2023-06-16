@@ -35,6 +35,8 @@ end
 
 """A null NameList for the top level input"""
 const top_level = NameList(0)
+"""A NameID for TOP_LEVEL"""
+const top_level_id = NameID(0)
 """the id for unnamed key. This happens when an array has loose values and containers"""
 const unnamed_id = NameID(1)
 """the name to use for unnamed keys"""
