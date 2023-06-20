@@ -14,7 +14,7 @@ using ..ColumnDefinitions:  ColumnDefinition,
                             make_column_def_child_copies
 import ..get_name
 
-export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes, get_default
+export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes, get_default, make_path_graph
 
 @sum_type Node :hidden begin
     Path(::NameID, ::Vector{Node})
@@ -142,5 +142,5 @@ end
 
 """Create a graph of field_paths that models the structure of the nested data"""
 make_path_graph(csm, column_defs) = PathNode(top_level_id, make_path_nodes!(csm, column_defs))
-
+make_path_graph(_, ::Nothing) = SimpleNode(unnamed_id)
 end

@@ -20,23 +20,26 @@ end
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
 function make_column_tuple(col_set, node::Node, lazy_columns::Bool)
+    column_t = lazy_columns ? NestedIterator : Union{Vector, PooledArray}
+    return make_column_tuple(col_set, node, column_t)
+end
+function make_column_tuple(col_set, node::Node, column_t::Type{T}) where T
     return @cases node begin
-        [Path,Value](n) => make_column_tuple(col_set, n, lazy_columns)
+        Path(_,c) => new_level(col_set, c, column_t)
+        Value(_, _, fp, pool, _) => new_column(col_set, fp, pool, column_t)
         Simple => throw(ErrorException("there should be no simple nodes when building the column tuple"))
     end
 end
-function make_column_tuple(col_set, path_graph::AbstractPathNode, lazy_columns::Bool)
-    kvs = []
-    for child in get_children(path_graph)
-        push!(kvs, Symbol(get_name(child)) => make_column_tuple(col_set, child, lazy_columns))
+function new_level(col_set, child_nodes, column_t::Type{T}) where T
+    keyval_pairs = Vector{Pair{Symbol, Union{Table,T}}}(undef, length(child_nodes))
+    for (i, child) in enumerate(child_nodes)
+        keyval_pairs[i] = make_column_tuple(col_set, child, column_t)
     end
-
-    children_tuple = NamedTuple(kvs)
-    return Table(children_tuple)
+    return Table(NamedTuple(keyval_pairs))
 end
-function make_column_tuple(col_set, path_graph::ValueNode, lazy_columns::Bool)
-    lazy_column = col_set[get_field_path(path_graph)]
-    value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
+function new_column(col_set, field_path, pool_arrays, ::Type{T}) where T
+    lazy_column = col_set[field_path]
+    value_column =  T <: NestedIterator ? lazy_column : collect(lazy_column, pool_arrays)
     return value_column
 end
 

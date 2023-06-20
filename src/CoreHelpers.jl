@@ -16,6 +16,7 @@ end
 DictStep(name_list, data, path_node) = UnpackStep'.DictStep(name_list, data, path_node)
 ArrayStep(name_list, arr, path_node) = UnpackStep'.ArrayStep(name_list, arr, path_node)
 LeafStep(name_list, data) = UnpackStep'.LeafStep(name_list, data)
+LeafStep(name_list, data, _) = UnpackStep'.LeafStep(name_list, data)
 DefaultStep(name_list) = UnpackStep'.DefaultStep(name_list)
 MergeStep(num_columns) = UnpackStep'.MergeStep(num_columns)
 StackStep(num_columns) = UnpackStep'.StackStep(num_columns)
@@ -23,7 +24,7 @@ NewColumnSetStep(col_set) = UnpackStep'.NewColumnSetStep(col_set)
 
 # A couple predefined new column set step creators
 missing_column_set_step(csm, path_node) = NewColumnSetStep(make_missing_column_set(csm, path_node))
-init_column_set_step(csm, name, data) = NewColumnSetSteps(init_column_set(csm, name, data))
+init_column_set_step(csm, name_list, data) = NewColumnSetStep(init_column_set(csm, name_list, data))
 empty_column_set_step(csm) = NewColumnSetStep(get_column_set(csm))
 
 function PathGraph.get_name(u::UnpackStep)
@@ -94,18 +95,17 @@ function empty_arr_path!(csm, path_node, instruction_stack)
     push!(instruction_stack, next_step)
 end
 
-function all_and_no_containers_path_node(node, container_count)
-    child_nodes = get_children(node)
+function calculate_container_status_for_path_node(child_nodes, container_count)
     # for path nodes, we need to check if there is :unnamed (indicating that there should be loose values)
     # if so, override all_containers so we check for loose
-    if !any(unnamed() == get_name(n) for n in child_nodes)
+    if !any(unnamed == get_name(n) for n in child_nodes)
         # otherwise, we ignore any non-containers
         return (true, false)
     end
     (false, container_count == 0)
 end
 
-function wrap_container_val(data_has_name, name_id, data, node, csm)
+function wrap_container_val(data_has_name::Bool, name_list::NameList, data, node::Node, csm::ColumnSetManager)
     @debug "wrap_container val for" data=data 
     if data_has_name
         return wrap_object(name_id, data, node)

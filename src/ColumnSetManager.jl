@@ -4,7 +4,7 @@ using ..NestedIterators
 import ..get_name
 export NameID, NameList, top_level, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length
-export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set
+export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set
 
 #### Linked List for Key/Names ####
 ###################################
@@ -81,6 +81,19 @@ function Base.getindex(cs::ColumnSet, k)
     return p[2]
 end
 
+
+"""
+    get_column!(cols::ColumnSet, name, default::NestedIterator)
+Get a column from a set with a given name, if no column with that name is found
+construct a new column with same length as column set
+"""
+function Base.pop!(cols::ColumnSet, name_id::NameID, default::NestedIterator)
+    return if haskey(cols,name_id)
+        last(pop!(cols,name_id))
+    else
+        cycle(default, column_length(cols))
+    end
+end
 function Base.pop!(cs::ColumnSet, k)
     i = searchsortedfirst(cs.cols, (k,0); by=first)
     p = popat!(cs.cols, i)
@@ -346,18 +359,7 @@ Return the lowest value id key from a columnset
 """
 get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : typemax(Int64)
 
-"""
-    get_column!(cols::ColumnSet, name, default::NestedIterator)
-Get a column from a set with a given name, if no column with that name is found
-construct a new column with same length as column set
-"""
-function Base.pop!(cols::ColumnSet, name_id::NameID, default::NestedIterator)
-    return if haskey(cols,name_id)
-        last(pop!(cols,name_id))
-    else
-        cycle(default, column_length(cols))
-    end
-end
+
 
 
 end # ColumnSetManagers

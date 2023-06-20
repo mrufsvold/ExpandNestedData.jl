@@ -254,140 +254,138 @@ end
 
     end
 
-    
-
-    # end
-
-    # @testset "DataStructure Internals" begin
-    #     d = OrderedRobinDict(:a => 1, :b => 2)
-    #     k = d.keys
-    #     @test k isa Vector{Symbol}
-    #     @test k[2] == :b
-    # end
+    @testset "DataStructure Internals" begin
+        d = OrderedRobinDict(:a => 1, :b => missing)
+        k = d.keys
+        @test k isa Vector{Symbol}
+        @test k[2] == :b
+        d[:b] = 5 
+        @test (d[:b]) == 5
+    end
 
 
-    # # Source Data
-    # simple_test_body = JSON3.read("""
-    # {"data" : [
-    #     {"E" : 7, "D" : 1},
-    #     {"E" : 8, "D" : 2}
-    # ]}""")
-    # expected_simple_table = (data_E=[7,8], data_D=[1,2])
+    # Source Data
+    simple_test_body = JSON3.read("""
+    {"data" : [
+        {"E" : 7, "D" : 1},
+        {"E" : 8, "D" : 2}
+    ]}""")
+    expected_simple_table = (data_E=[7,8], data_D=[1,2])
 
-    # test_body_str = """
-    # {
-    #     "a" : [
-    #         {"b" : 1, "c" : 2},
-    #         {"b" : 2},
-    #         {"b" : [3, 4], "c" : 1},
-    #         {"b" : []}
-    #     ],
-    #     "d" : 4
-    # }
-    # """
-    # test_body = JSON3.read(test_body_str)
+    test_body_str = """
+    {
+        "a" : [
+            {"b" : 1, "c" : 2},
+            {"b" : 2},
+            {"b" : [3, 4], "c" : 1},
+            {"b" : []}
+        ],
+        "d" : 4
+    }
+    """
+    test_body = JSON3.read(test_body_str)
 
-    # struct InternalObj
-    #     b
-    #     c
-    # end
-    # struct MainBody
-    #     a::Vector{InternalObj}
-    #     d
-    # end
-    # struct_body = JSON3.read(test_body_str, MainBody)
+    struct InternalObj
+        b
+        c
+    end
+    struct MainBody
+        a::Vector{InternalObj}
+        d
+    end
+    struct_body = JSON3.read(test_body_str, MainBody)
 
-    # heterogenous_level_test_body = Dict(
-    #         :data => [
-    #             Dict(:E => 8),
-    #             5
-    #             ]
-    #         )
+    heterogenous_level_test_body = Dict(
+            :data => [
+                Dict(:E => 8),
+                5
+                ]
+            )
 
-    # @testset "Unguided Expand" begin
-    #     actual_simple_table = EN.expand(simple_test_body)
-    #     @test unordered_equal(actual_simple_table, expected_simple_table)
-    #     @test eltype(actual_simple_table.data_D) == Int64
+    @testset "Unguided Expand" begin
+        actual_simple_table = EN.expand(simple_test_body)
+        @test unordered_equal(actual_simple_table, expected_simple_table)
+        @test eltype(actual_simple_table.data_D) == Int64
 
-    #     # Expanding Arrays
-    #     @test begin
-    #         actual_expanded_table = EN.expand(test_body)
-    #         expected_table_expanded = (
-    #             a_b=[1,2,3,4,missing], 
-    #             a_c=[2,missing,1,1, missing], 
-    #             d=[4,4,4,4,4])
-    #         unordered_equal(actual_expanded_table, expected_table_expanded)
-    #     end
+        # Expanding Arrays
+        @test begin
+            actual_expanded_table = EN.expand(test_body)
+            expected_table_expanded = (
+                a_b=[1,2,3,4,missing], 
+                a_c=[2,missing,1,1, missing], 
+                d=[4,4,4,4,4])
+            unordered_equal(actual_expanded_table, expected_table_expanded)
+        end
 
-    #     # Using struct of struct as input
-    #     @test begin
-    #         expected_table_expanded = (
-    #             new_column=[1,2,3,4,nothing], 
-    #             a_c=[2,nothing,1,1, nothing], 
-    #             d=[4,4,4,4,4])
-    #             unordered_equal(
-    #             EN.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
-    #             expected_table_expanded)
-    #     end
-    #     @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
-    #         typeof(PooledArray(Int64[])))
+        # Using struct of struct as input
+        @test begin
+            expected_table_expanded = (
+                new_column=[1,2,3,4,nothing], 
+                a_c=[2,nothing,1,1, nothing], 
+                d=[4,4,4,4,4])
+                unordered_equal(
+                EN.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
+                expected_table_expanded)
+        end
+        @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
+            typeof(PooledArray(Int64[])))
         
-    #     @test fieldsequal((EN.expand(struct_body; column_style=:nested) |> rows |> last), (a=(b=1,c=2), d=4))
+        @test fieldsequal((EN.expand(struct_body; column_style=:nested) |> rows |> last), (a=(b=1,c=2), d=4))
 
-    #     @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
+        @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 
-    #     empty_dict_field = Dict(
-    #         :a => Dict(),
-    #         :b => 5
-    #     )
-    #     @test unordered_equal(EN.expand(empty_dict_field), (b = [5],))
+        empty_dict_field = Dict(
+            :a => Dict(),
+            :b => 5
+        )
+        @test unordered_equal(EN.expand(empty_dict_field), (b = [5],))
 
-    #     @test begin
-    #         two_layer_deep = Dict(
-    #             :a => Dict(
-    #                 :b => Dict(
-    #                     :c => 1,
-    #                     :d => 2,
-    #                 )
-    #             )
-    #         )
-    #         unordered_equal(EN.expand(two_layer_deep), (a_b_c = [1], a_b_d = [2]))
-    #     end
-    # end
+        @test begin
+            two_layer_deep = Dict(
+                :a => Dict(
+                    :b => Dict(
+                        :c => 1,
+                        :d => 2,
+                    )
+                )
+            )
+            unordered_equal(EN.expand(two_layer_deep), (a_b_c = [1], a_b_d = [2]))
+        end
+    end
 
 
-    # @testset "Configured Expand" begin
-    #     columns_defs = [
-    #         EN.ColumnDefinition((:d,)),
-    #         EN.ColumnDefinition((:a, :b)),
-    #         EN.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
-    #         EN.ColumnDefinition((:e, :f); default_value="Missing branch")
-    #         ]
-    #     expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
-    #         :e_f => repeat(["Missing branch"], 5))
-    #     )
-    #     @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
-    #     @test fieldsequal(
-    #         EN.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
-    #         (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
-    #     )
-    #     columns_defs = [
-    #         EN.ColumnDefinition((:data,)),
-    #         EN.ColumnDefinition((:data, :E))
-    #     ]
-    #     @test unordered_equal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+    @testset "Configured Expand" begin
+        columns_defs = [
+            EN.ColumnDefinition((:d,)),
+            EN.ColumnDefinition((:a, :b)),
+            EN.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+            EN.ColumnDefinition((:e, :f); default_value="Missing branch")
+            ]
+        expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
+            :e_f => repeat(["Missing branch"], 5))
+        )
+        @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
+        @test fieldsequal(
+            EN.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
+            (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
+        )
+        columns_defs = [
+            EN.ColumnDefinition((:data,)),
+            EN.ColumnDefinition((:data, :E))
+        ]
+        @test unordered_equal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
 
-    # end
+    end
 
-    # @testset "superficial options" begin
-    #     # Expanding Arrays
-    #     actual_expanded_table = EN.expand(test_body; name_join_pattern = "?_#")
-    #     @test begin
-    #         expected_table_expanded = NamedTuple((
-    #             Symbol("a?_#b")=>[1,2,3,4,missing], 
-    #             Symbol("a?_#c")=>[2,missing,1,1, missing], 
-    #             :d=>[4,4,4,4,4]))
-    #         unordered_equal(actual_expanded_table, expected_table_expanded)
-    #     end
-    # end
+    @testset "superficial options" begin
+        # Expanding Arrays
+        actual_expanded_table = EN.expand(test_body; name_join_pattern = "?_#")
+        @test begin
+            expected_table_expanded = NamedTuple((
+                Symbol("a?_#b")=>[1,2,3,4,missing], 
+                Symbol("a?_#c")=>[2,missing,1,1, missing], 
+                :d=>[4,4,4,4,4]))
+            unordered_equal(actual_expanded_table, expected_table_expanded)
+        end
+    end
 end
