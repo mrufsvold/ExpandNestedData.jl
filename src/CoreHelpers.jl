@@ -98,7 +98,7 @@ end
 function calculate_container_status_for_path_node(child_nodes, container_count)
     # for path nodes, we need to check if there is :unnamed (indicating that there should be loose values)
     # if so, override all_containers so we check for loose
-    if !any(unnamed == get_name(n) for n in child_nodes)
+    if !any(unnamed_id == get_name(n) for n in child_nodes)
         # otherwise, we ignore any non-containers
         return (true, false)
     end
@@ -108,7 +108,7 @@ end
 function wrap_container_val(data_has_name::Bool, name_list::NameList, data, node::Node, csm::ColumnSetManager)
     @debug "wrap_container val for" data=data 
     if data_has_name
-        return wrap_object(name_id, data, node)
+        return wrap_object(name_list, data, node)
     end
     return missing_column_set_step(csm, node)
 end

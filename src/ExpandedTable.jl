@@ -11,7 +11,7 @@ end
 function ExpandedTable(columns::OrderedRobinDict{K, T}, path_graph, csm; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
     column_tuple = make_column_tuple(columns, path_graph, lazy_columns, csm)
     col_lookup = Dict(
-        get_name(csm, get_final_name(val_node)) => reconstruct_field_path(csm, get_field_path(val_node))
+        get_name(csm, get_final_name(val_node)) => reconstruct_field_path(csm, get_field_path(val_node), true)
         for val_node in get_all_value_nodes(path_graph)
     )
     return ExpandedTable(col_lookup, column_tuple)
@@ -27,18 +27,18 @@ function make_column_tuple(col_set, node::Node, column_t::Type{T}, csm) where T
     return @cases node begin
         Path(n,c) => new_level(col_set, n, c, column_t, csm)
         Value(n, _, fp_id, pool, _) => new_column(col_set, n, fp_id, pool, column_t, csm)
-        Simple => throw(ErrorException("there should be no simple nodes when building the column tuple"))
+        Simple => throw(ErrorException("there should be no simple nodes when building the column tuple for the final table"))
     end
 end
 function new_level(col_set, name_id, child_nodes, column_t::Type{T}, csm) where T
-    children_table = get_children_table(col_set, name_id, child_nodes, column_t, csm)
+    children_table = get_children_table(col_set, child_nodes, column_t, csm)
     if name_id == top_level_id
         return children_table
     end
     return get_name(csm, name_id) => children_table
 end
 
-function get_children_table(col_set, name_id, child_nodes, column_t::Type{T}, csm) where T
+function get_children_table(col_set, child_nodes, column_t::Type{T}, csm) where T
     keyval_pairs = Vector{Pair{Symbol, Union{Table,T}}}(undef, length(child_nodes))
     for (i, child) in enumerate(child_nodes)
         keyval_pairs[i] = make_column_tuple(col_set, child, column_t, csm)

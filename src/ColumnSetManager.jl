@@ -237,11 +237,16 @@ end
 
 """
     reconstruct_field_path(csm::ColumnSetManager, id)
-Given an id for a field_path, reconstruct a tuple of actual names
+Given an id for a field_path, reconstruct a tuple of actual names.
+For heterogenous nodes (with both containers and values) the field path has an "unnamed" value. This
+is dropped when reconstructing the field path.
 """
-function reconstruct_field_path(csm::ColumnSetManager, id::NameID)
+function reconstruct_field_path(csm::ColumnSetManager, id::NameID, include_unnamed=false)
     id_path = get_name(csm, id)
-    return tuple((Symbol(get_name(csm, name_id)) for name_id in id_path)...)
+    symbol_gen = include_unnamed ?
+        (Symbol(get_name(csm, name_id)) for name_id in id_path) :
+        (Symbol(get_name(csm, name_id)) for name_id in id_path if name_id != unnamed_id)
+    return tuple(symbol_gen...)
 end
 
 """

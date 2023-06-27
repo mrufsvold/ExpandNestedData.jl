@@ -1,4 +1,5 @@
 module NestedIterators
+using PooledArrays
 export NestedIterator, seed, repeat_each, cycle
 
 """NestedIterator is a container for instructions that build columns"""

@@ -142,7 +142,7 @@ function process_dict!(parent_name_list, data, node, instruction_stack, csm)
         data_has_name = name_id in data_name_ids 
         next_step = @cases child_node begin
             Path => wrap_container_val(data_has_name, name_list, child_data, child_node, csm)
-            Value => wrap_object(name_list, child_data, child_node, leaf_step)
+            Value => wrap_object(name_list, child_data, child_node, LeafStep)
             Simple => wrap_object(name_list, child_data, child_node)
         end
         @debug "Adding next step" child_name=name step=next_step
@@ -204,7 +204,7 @@ function process_array!(name_list, arr::T, node, instruction_stack, csm) where T
         loose_values = view(arr, .!is_container_mask)
         next_step = length(loose_values) == 0 ?
             missing_column_set_step(csm, node) :
-            wrap_object(NameList(csm, name_list, unnamed_id), loose_values, node, leaf_step)
+            wrap_object(NameList(csm, name_list, unnamed_id), loose_values, node, LeafStep)
         @debug "loose values" next_step=next_step
         push!(instruction_stack, next_step)
     end
