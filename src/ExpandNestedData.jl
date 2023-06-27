@@ -8,7 +8,7 @@ using StructTypes
 using SumTypes
 using TypedTables: Table
 
-# export expand
+export expand
 export ColumnDefinition
 
 """NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
