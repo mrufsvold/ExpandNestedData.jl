@@ -41,7 +41,7 @@ function expand(data, column_definitions=nothing;
         make_path_graph(csm, construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)) :
         path_graph
 
-    expanded_table = ExpandedTable(columns, final_path_graph; lazy_columns=lazy_columns, pool_arrays=pool_arrays)
+    expanded_table = ExpandedTable(columns, final_path_graph, csm; lazy_columns=lazy_columns, pool_arrays=pool_arrays)
 
     final_table = if typed_column_style == flat_columns
         as_flat_table(expanded_table)

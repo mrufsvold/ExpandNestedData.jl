@@ -4,7 +4,7 @@ using ..NestedIterators
 import ..get_name
 export NameID, NameList, top_level, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length
-export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set
+export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
 
 #### Linked List for Key/Names ####
 ###################################

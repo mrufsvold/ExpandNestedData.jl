@@ -1,7 +1,7 @@
 module ColumnDefinitions
 using ..ColumnSetManagers: ColumnSet, unnamed
 import ..join_names
-export ColumnDefinition, get_field_path, get_column_name, get_default_value, get_pool_arrays, make_column_def_child_copies, current_path_name
+export ColumnDefinition, get_field_path, get_column_name, get_default_value, get_pool_arrays, make_column_def_child_copies, current_path_name, construct_column_definitions
 
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
@@ -47,7 +47,7 @@ function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, nam
     column_name = haskey(column_names, field_path) ? column_names[field_path] : nothing
     ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
 end
-function construct_column_definitions(col_set::ColumnSet, column_names, pool_arrays, name_join_pattern)
+function construct_column_definitions(col_set, column_names, pool_arrays, name_join_pattern)
     paths = keys(col_set)
     return ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
 end
