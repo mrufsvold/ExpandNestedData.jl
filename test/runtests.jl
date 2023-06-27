@@ -149,7 +149,6 @@ end
             simple = ExpandNestedData.SimpleNode(csm, :a)
             value = ExpandNestedData.ValueNode(csm, :a, :a, (:a,), false, ExpandNestedData.NestedIterator([1]))
             path_n = ExpandNestedData.PathNode(csm, :a, ExpandNestedData.Node[value])
-            @show ExpandNestedData.get_name.((simple,value,path_n))
             @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
             for (f,result) in ((
                     ExpandNestedData.PathGraph.get_final_name, ExpandNestedData.NameID(2)), 
