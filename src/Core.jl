@@ -100,8 +100,8 @@ end
 Build a column set with a single column which is the default column for the run
 """
 function create_default_column_set!(name_list, default_column, column_stack, csm)
-    col_set = get_column_set(csm)
     name_id = get_id(csm, name_list)
+    col_set = get_column_set(csm)
     col_set[name_id] = default_column
     push!(column_stack, col_set)
 end

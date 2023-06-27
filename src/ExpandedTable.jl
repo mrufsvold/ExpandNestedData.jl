@@ -25,23 +25,32 @@ function make_column_tuple(col_set, node::Node, lazy_columns::Bool, csm)
 end
 function make_column_tuple(col_set, node::Node, column_t::Type{T}, csm) where T
     return @cases node begin
-        Path(_,c) => new_level(col_set, c, column_t, csm)
-        Value(_, final_name_id, fp_id, pool, _) => new_column(col_set, final_name_id, fp_id, pool, column_t, csm)
+        Path(n,c) => new_level(col_set, n, c, column_t, csm)
+        Value(n, _, fp_id, pool, _) => new_column(col_set, n, fp_id, pool, column_t, csm)
         Simple => throw(ErrorException("there should be no simple nodes when building the column tuple"))
     end
 end
-function new_level(col_set, child_nodes, column_t::Type{T}, csm) where T
+function new_level(col_set, name_id, child_nodes, column_t::Type{T}, csm) where T
+    children_table = get_children_table(col_set, name_id, child_nodes, column_t, csm)
+    if name_id == top_level_id
+        return children_table
+    end
+    return get_name(csm, name_id) => children_table
+end
+
+function get_children_table(col_set, name_id, child_nodes, column_t::Type{T}, csm) where T
     keyval_pairs = Vector{Pair{Symbol, Union{Table,T}}}(undef, length(child_nodes))
     for (i, child) in enumerate(child_nodes)
         keyval_pairs[i] = make_column_tuple(col_set, child, column_t, csm)
     end
     return Table(NamedTuple(keyval_pairs))
+
 end
-function new_column(col_set, final_name_id, field_path_id, pool_arrays, ::Type{T}, csm) where T
+function new_column(col_set, name_id, field_path_id, pool_arrays, ::Type{T}, csm) where T
     field_path = reconstruct_field_path(csm, field_path_id)
     lazy_column = col_set[field_path]
     value_column =  T <: NestedIterator ? lazy_column : collect(lazy_column, pool_arrays)
-    return get_name(csm, final_name_id) => value_column
+    return get_name(csm, name_id) => value_column
 end
 
 # Get Tables

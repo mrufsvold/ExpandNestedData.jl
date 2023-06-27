@@ -2,8 +2,8 @@ module ColumnSetManagers
 using DataStructures: OrderedRobinDict, Stack
 using ..NestedIterators
 import ..get_name
-export NameID, NameList, top_level, unnamed, unnamed_id
-export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length
+export NameID, NameList, top_level, top_level_id, unnamed, unnamed_id
+export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length, set_length!
 export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
 
 #### Linked List for Key/Names ####
@@ -41,6 +41,7 @@ const top_level_id = NameID(0)
 const unnamed_id = NameID(1)
 """the name to use for unnamed keys"""
 const unnamed = :expand_nested_data_unnamed
+const max_id = NameID(typemax(Int64))
 
 #### ColumnSet ####
 ###################
@@ -187,7 +188,7 @@ function get_id(csm::ColumnSetManager, name)
     return id
 end
 
-get_id(csm::ColumnSetManager, name::NameID) = name
+get_id(::ColumnSetManager, name::NameID) = name
     
 
 """
@@ -205,7 +206,7 @@ function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
     empty!(csm.name_list_collector)
     id::Int64 = name_list.i
     @inbounds while id != 0
-        link = csm.name_list_links[name_list.i]
+        link = csm.name_list_links[id]
         push!(csm.name_list_collector, link.name_id)
         id = link.tail_i
     end
@@ -357,7 +358,7 @@ end
     get_first_key(cs::ColumnSet)
 Return the lowest value id key from a columnset
 """
-get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : typemax(Int64)
+get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : max_id
 
 
 
