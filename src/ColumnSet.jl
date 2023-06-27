@@ -1,89 +1,81 @@
-##### ColumnSet #####
-#####################
-
-# Convenience alias for a dictionary of columns
-ColumnSet = Dict{Tuple, NestedIterator} 
-columnset(col, level) = ColumnSet(Tuple(() for _ in 1:level) => col)
-init_column_set(step) = init_column_set(get_data(step), get_name(step), get_level(step))
-function init_column_set(data, name, level)
-    col_set = columnset(NestedIterator(data), level)
-    prepend_name!(col_set, name, level)
-    return col_set
+"""A dict-like set of columns. The keys are Int64 ids for actual names that are stored
+in the ColumnSetManager"""
+mutable struct ColumnSet
+    cols::Vector{Pair{Int64, NestedIterator}}
+    len::Int64
+end
+ColumnSet() = ColumnSet(Pair{Int64, NestedIterator}[], 0)
+function ColumnSet(p::Pair...)
+    cs = ColumnSet(Pair{Int64, NestedIterator}[p...], 0)
+    sort_keys!(cs)
+    reset_length!(cs)
+    return cs
 end
 
-column_length(cols) = cols |> values |> first |> length 
+# Dict Interface
+function Base.empty!(cs::ColumnSet)
+    empty!(cs.cols)
+    cs.len = 0
+end
 
-"""apply_in_place!(cols, f, args...)
-Apply f to each key, column pair by popping the value and readding
-the key (this prevents mismatching key hashes after manipulating a ColumnSet)"""
-function apply_in_place!(cols, f, args...)
-    initial_keys = collect(keys(cols))
-    for key in initial_keys 
-        val = pop!(cols, key)
-        key, val = f(key, val, args...)
-        cols[key] = val
+Base.haskey(cs::ColumnSet, k) = insorted((k,0), cs.cols; by=first)
+
+function Base.setindex!(cs::ColumnSet, v, k)
+    insert!(cs, (k=>v))
+    cs.len = max(cs.len, length(v))
+    return cs
+end
+
+function Base.getindex(cs::ColumnSet, k)
+    i = searchsortedfirst(cs.cols, (k,0); by=first)
+    p = cs.cols[i]
+    if p[1] != k
+        throw(KeyError(k))
     end
+    return p[2]
 end
 
-"""
-prepend_name!(cols, name, level)
-Set the given name for all column keys at the given level
-"""
-function prepend_name!(cols, name, level)
-    level < 1 && return nothing
-    apply_in_place!(cols, _prepend_name, name, level)
-end
-function _prepend_name(key, val, name, level)
-    new_key = Tuple(i==level ? name : k for (i,k) in enumerate(key))
-    return new_key, val
+function Base.pop!(cs::ColumnSet, k)
+    i = searchsortedfirst(cs.cols, (k,0); by=first)
+    p = popat!(cs.cols, i)
+    if p[1] != k
+        throw(KeyError(k))
+    end
+    return p
 end
 
-"""
-repeat_each_column!(cols, n)
-
-Given a column set, apply repeat_each to all columns in place
-"""
-function repeat_each_column!(cols, n)
-    apply_in_place!(cols,_repeat_each_column, n)
-end
-function _repeat_each_column(key, val, n)
-    return key, repeat_each(val, n)
+function Base.push!(cs::ColumnSet, p::Pair) 
+    push!(cs.cols, p)
 end
 
-"""
-cycle_columns_to_length!(cols::ColumnSet) 
-
-Given a column set where the length of all columns is some factor of the length of the longest
-column, cycle all the short columns to match the length of the longest
-"""
-function cycle_columns_to_length!(cols::ColumnSet)
-    col_lengths = cols |> values .|> length
-    longest = col_lengths |> maximum
-    apply_in_place!(cols, cols_to_length, longest)
-    return cols
-end
-function cols_to_length(key, val, longest)
-    catchup_mult = longest ÷ length(val)
-    return key, cycle(val, catchup_mult)
+function Base.merge!(cs1::ColumnSet, cs2::ColumnSet)
+    append!(cs1.cols, cs2.cols)
+    sort_keys!(cs1)
+    cs1.len = max(cs1.len, cs2.len)
+    return cs1
 end
 
-"""
-get_column(cols::ColumnSet, name, default::NestedIterator)
+Base.keys(cs::ColumnSet) = (first(p) for p in cs.cols)
+Base.values(cs::ColumnSet) = (last(p) for p in cs.cols)
+Base.length(cs::ColumnSet) = length(cs.cols)
+Base.insert!(cs::ColumnSet, p::Pair) = insert!(cs.cols, searchsortedfirst(cs.cols, p; by=first), p)
 
-Get a column from a set with a given name, if no column with that name is found
-construct a new column with same length as column set
-"""
-get_column(cols::ColumnSet, name, default::NestedIterator) = name in keys(cols) ? cols[name] : cycle(default, column_length(cols) ÷ length(default))
+sort_keys!(cs::ColumnSet) = sort!(cs.cols; by=first, alg=InsertionSort)
+"""Get the length of the longest column. This is almost always the length of all columns in the set
+except in the midst of merging multiple sets together"""
+column_length(cols::ColumnSet) = cols.len
 
-
-
-"""Return a missing column for each member of a child path"""
-function make_missing_column_set(path_node)
-    missing_column_set =  Dict(
-        get_field_path(value_node) => get_default(value_node)
-        for value_node in get_all_value_nodes(path_node)
-    )
-    return missing_column_set
+"""Check for the longest column in a set and update column length of set"""
+function reset_length!(cs::ColumnSet)
+    len = 0
+    for v in values(cs)
+        len = max(len, length(v))
+    end
+    set_length!(cs, len)
+    return cs
 end
 
-
+"""Force column length of set"""
+function set_length!(cs::ColumnSet, l)
+    cs.len = l
+end

@@ -1,18 +1,18 @@
 @enum StepType dict arr leaf default merge_cols stack_cols columns
 
 struct ExpandMissing end
-struct UnpackStep{N,T,C}
+struct UnpackStep{T,C}
     type::StepType
-    name::N
+    name::Union{Nil{Int64},Cons{Int64}}
     data::T
-    level::Int64
     path_node::C
 end
 get_step_type(u::UnpackStep) = u.type
 get_name(u::UnpackStep) = u.name
 get_data(u::UnpackStep) = u.data
-get_level(u::UnpackStep) = u.level
 get_path_node(u::UnpackStep) = u.path_node
+
+const no_step_name = list(-1)
 
 """NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
 contents without worrying about `getkey` or `getproperty`, etc.
@@ -62,13 +62,13 @@ function ColumnDefinition(field_path; kwargs...)
 end
 function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
     if column_name isa Nothing
-        path = last(field_path) == :unnamed ? field_path[1:end-1] : field_path
+        path = last(field_path) == unnamed ? field_path[1:end-1] : field_path
         column_name = join_names(path, name_join_pattern)
     end
     ColumnDefinition(field_path, column_name, default_value, pool_arrays)
 end
 function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
-    column_name = field_path in keys(column_names) ? column_names[field_path] : nothing
+    column_name = haskey(column_names, field_path) ? column_names[field_path] : nothing
     ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
 end
 function construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)
@@ -80,12 +80,31 @@ function current_path_name(c::ColumnDefinition, level)
     fp = get_field_path(c)
     return fp[level]
 end
+
+"""
+    get_unique_current_names(defs, level)
+Get all unique names for the given depth level for a list of ColumnDefinitions
+"""
 get_unique_current_names(defs, level) = unique((current_path_name(def, level) for def in defs))
+
+"""
+    make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, level)
+Return a column definitions that have children for the given name at the given level.
+"""
 function make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, level)
-    return filter(
+    mask = findall(
         def -> is_current_name(def, name, level) && length(get_field_path(def)) > level, 
         column_defs
         )
+    return view(column_defs, mask)
 end
+"""
+    is_current_name(column_def::ColumnDefinition, name, level)
+Check if name matches the field path for column_def at level
+"""
 is_current_name(column_def::ColumnDefinition, name, level) = current_path_name(column_def, level) == name
+"""
+    has_more_keys(column_def, level)
+Check if there are more keys in the field path below the given level
+"""
 has_more_keys(column_def, level) = level < length(get_field_path(column_def))

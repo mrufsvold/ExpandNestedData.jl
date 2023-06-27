@@ -13,7 +13,6 @@ end
 struct ValueNode <: AbstractPathNode
     name
     final_name::Symbol
-    children::Vector{AbstractPathNode}
     field_path::Tuple
     pool_arrays
     default::NestedIterator
@@ -24,8 +23,10 @@ struct SimpleNode <: AbstractPathNode
     name
 end
 function ValueNode(name, field_path, pool_arrays, default; col_name)
-    ValueNode(name, col_name, ValueNode[], field_path, pool_arrays,default)
+    ValueNode(name, col_name, field_path, pool_arrays,default)
 end
+const NoNode = SimpleNode(nothing)
+
 
 get_children(n::AbstractPathNode) = n.children
 get_name(n::AbstractPathNode) = n.name
@@ -56,11 +57,6 @@ function get_all_value_nodes(node::T, ch) where {T}
 end
 
 
-
-"""
-SIDE EFFECT: also appends :unnamed to any column defs that stop at a pathnode to capture any
-loose values in an array at that level
-"""
 function make_path_nodes!(column_defs, level = 1)
     unique_names = get_unique_current_names(column_defs, level)
     nodes = Vector{AbstractPathNode}(undef, length(unique_names))
@@ -90,8 +86,8 @@ function make_path_nodes!(column_defs, level = 1)
             without_child_idx = findfirst(identity, are_value_nodes)
             without_child = matching_defs[without_child_idx]
             value_column_node = ValueNode(
-                :unnamed, 
-                (get_field_path(without_child)..., :unnamed), 
+                unnamed, 
+                (get_field_path(without_child)..., unnamed), 
                 get_pool_arrays(without_child),
                 NestedIterator(get_default_value(without_child));
                 col_name=get_column_name(without_child))

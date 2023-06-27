@@ -6,7 +6,7 @@ struct NestedIterator{T} <: AbstractArray{T, 1}
     one_value::Bool
     unique_val::Ref{T}
 end
-
+NestedIterator() = NestedIterator{Union{}}(identity, 0, Union{}, true, Ref{Union{}}())
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
 Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
