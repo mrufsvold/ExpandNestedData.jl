@@ -8,10 +8,10 @@ struct ExpandedTable
 end
 
 """Construct an ExpandedTable from the results of `create_columns`"""
-function ExpandedTable(columns::OrderedRobinDict{K, T}, path_graph; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
-    column_tuple = make_column_tuple(columns, path_graph, lazy_columns)
+function ExpandedTable(columns::OrderedRobinDict{K, T}, path_graph, csm; lazy_columns, kwargs...) where {K, T<: NestedIterator{<:Any}}
+    column_tuple = make_column_tuple(columns, path_graph, lazy_columns, csm)
     col_lookup = Dict(
-        get_final_name(val_node) => get_field_path(val_node)
+        get_name(csm, get_final_name(val_node)) => reconstruct_field_path(csm, get_field_path(val_node), true)
         for val_node in get_all_value_nodes(path_graph)
     )
     return ExpandedTable(col_lookup, column_tuple)
@@ -19,19 +19,38 @@ end
 
 """Build a nested NamedTuple of TypedTables from the columns following the same nesting structure
 as the source data"""
-function make_column_tuple(columns, path_graph::AbstractPathNode, lazy_columns::Bool)
-    kvs = []
-    for child in get_children(path_graph)
-        push!(kvs, Symbol(get_name(child)) => make_column_tuple(columns, child, lazy_columns))
-    end
-
-    children_tuple = NamedTuple(kvs)
-    return Table(children_tuple)
+function make_column_tuple(col_set, node::Node, lazy_columns::Bool, csm)
+    column_t = lazy_columns ? NestedIterator : Union{Vector, PooledArray}
+    return make_column_tuple(col_set, node, column_t, csm)
 end
-function make_column_tuple(columns, path_graph::ValueNode, lazy_columns::Bool)
-    lazy_column = columns[get_field_path(path_graph)]
-    value_column =  lazy_columns ? lazy_column : collect(lazy_column, get_pool_arrays(path_graph))
-    return value_column
+function make_column_tuple(col_set, node::Node, column_t::Type{T}, csm) where T
+    return @cases node begin
+        Path(n,c) => new_level(col_set, n, c, column_t, csm)
+        Value(n, _, fp_id, pool, _) => new_column(col_set, n, fp_id, pool, column_t, csm)
+        Simple => throw(ErrorException("there should be no simple nodes when building the column tuple for the final table"))
+    end
+end
+function new_level(col_set, name_id, child_nodes, column_t::Type{T}, csm) where T
+    children_table = get_children_table(col_set, child_nodes, column_t, csm)
+    if name_id == top_level_id
+        return children_table
+    end
+    return get_name(csm, name_id) => children_table
+end
+
+function get_children_table(col_set, child_nodes, column_t::Type{T}, csm) where T
+    keyval_pairs = Vector{Pair{Symbol, Union{Table,T}}}(undef, length(child_nodes))
+    for (i, child) in enumerate(child_nodes)
+        keyval_pairs[i] = make_column_tuple(col_set, child, column_t, csm)
+    end
+    return Table(NamedTuple(keyval_pairs))
+
+end
+function new_column(col_set, name_id, field_path_id, pool_arrays, ::Type{T}, csm) where T
+    field_path = reconstruct_field_path(csm, field_path_id)
+    lazy_column = col_set[field_path]
+    value_column =  T <: NestedIterator ? lazy_column : collect(lazy_column, pool_arrays)
+    return get_name(csm, name_id) => value_column
 end
 
 # Get Tables

@@ -1,23 +1,36 @@
 module ExpandNestedData
-using PooledArrays
-using StructTypes
 using Base: merge!
 using DataStructures
-using DataStructures: Stack, OrderedRobinDict, list, cons, Cons, Nil, IntSet
-# using Tables
+using DataStructures: Stack, OrderedRobinDict, cons, Cons, Nil
+using Logging
+using PooledArrays
+using StructTypes
+using SumTypes
 using TypedTables: Table
 
-export expand
+# export expand
 export ColumnDefinition
-export nested_columns, flat_columns
+
+"""NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
+contents without worrying about `getkey` or `getproperty`, etc.
+"""
+NameValueContainer = Union{StructTypes.DictType, StructTypes.DataType}
+Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayType}
+struct ExpandMissing end
+
+function get_name end
 
 include("Utils.jl")
 include("NestedIterators.jl")
-include("ColumnSet.jl")
 include("ColumnSetManager.jl")
-include("ExpandTypes.jl")
+include("ColumnDefinitions.jl")
 include("PathGraph.jl")
+using .NestedIterators
+using .ColumnSetManagers
+using .ColumnDefinitions
+using .PathGraph
 include("ExpandedTable.jl")
 include("Core.jl")
+include("CoreHelpers.jl")
 
 end

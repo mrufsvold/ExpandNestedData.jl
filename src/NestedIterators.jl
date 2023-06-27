@@ -1,12 +1,19 @@
+module NestedIterators
+using PooledArrays
+export NestedIterator, seed, repeat_each, cycle
+
 """NestedIterator is a container for instructions that build columns"""
-struct NestedIterator{T} <: AbstractArray{T, 1}
-    get_index::Function
+struct NestedIterator{T,F} <: AbstractArray{T, 1}
+    get_index::F
     column_length::Int64
     el_type::Type{T}
     one_value::Bool
     unique_val::Ref{T}
+    function NestedIterator(get_index, column_length, el_type, one_value, unique_val)
+        return new{el_type, typeof(get_index)}(get_index, column_length, el_type, one_value, unique_val)
+    end
 end
-NestedIterator() = NestedIterator{Union{}}(identity, 0, Union{}, true, Ref{Union{}}())
+NestedIterator() = NestedIterator(identity, 0, Union{}, true, Ref{Union{}}())
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
 Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
@@ -28,7 +35,7 @@ end
 (u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
 
 """repeat_each(c, N) will return an array where each source element appears N times in a row"""
-function repeat_each(c::NestedIterator{T}, n) where T
+function repeat_each(c::NestedIterator{T, <:Any}, n) where T
     # when there is only one unique value, we can skip composing the repeat_each step
     return if c.one_value
         NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
@@ -43,7 +50,7 @@ struct Uncycle <: InstructionCapture
 end
 (u::Uncycle)(i) = mod((i-1),u.n) + 1
 """cycle(c, n) cycles through an array N times"""
-function cycle(c::NestedIterator{T}, n) where T
+function cycle(c::NestedIterator{T, <:Any}, n) where T
     # when there is only one unique value, we can skip composing the uncycle step
     return if c.one_value && !(typeof(c.get_index) <: Seed)
         NestedIterator(c.get_index, c.column_length * n, T, true, c.unique_val)
@@ -53,18 +60,18 @@ function cycle(c::NestedIterator{T}, n) where T
     end
 end
 
-"""Captures the two getindex functions of stacked NestedIterators. f_len tells which index to break over to g."""
-struct Unstack{F, G} <: InstructionCapture
+"""Captures the two getindex functions of vcated NestedIterators. f_len tells which index to break over to g."""
+struct Unvcat{F, G} <: InstructionCapture
     f_len::Int64
     f::F
     g::G 
 end
-(u::Unstack)(i) = i > u.f_len ? u.g(i-u.f_len) : u.f(i)
+(u::Unvcat)(i) = i > u.f_len ? u.g(i-u.f_len) : u.f(i)
 
-"""stack(c1::NestedIterator, c2::NestedIterator)
+"""vcat(c1::NestedIterator, c2::NestedIterator)
 Return a single NestedIterator which is the result of vcat(c1,c2)
 """
-function stack(c1::NestedIterator{T}, c2::NestedIterator{U}) where {T, U}
+function Base.vcat(c1::NestedIterator{T, <:Any}, c2::NestedIterator{U, <:Any}) where {T, U}
     type = Union{T, U}
     len = (c1,c2) .|> length |> sum
 
@@ -74,9 +81,9 @@ function stack(c1::NestedIterator{T}, c2::NestedIterator{U}) where {T, U}
             return NestedIterator(c1.get_index, len, type, true, c1.unique_val)
         end
     end
-    NestedIterator(Unstack(length(c1), c1.get_index, c2.get_index), len, type, false, Ref{type}())
+    NestedIterator(Unvcat(length(c1), c1.get_index, c2.get_index), len, type, false, Ref{type}())
 end
-stack(c) = c
+Base.vcat(c::NestedIterator) = c
 
 
 """
@@ -106,6 +113,8 @@ function _NestedIterator(value::T, len::Int64, ncycle::Int64) where T
     if is_one
         unique_val[] = first(value)::E
     end
-    ni = NestedIterator{E}(f, len, E, is_one, unique_val)
+    ni = NestedIterator(f, len, E, is_one, unique_val)
     return cycle(ni, ncycle)
 end
+
+end #NestedIterators
