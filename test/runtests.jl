@@ -74,29 +74,30 @@ end
 
     @testset "Internals" begin
         @testset "NestedIterators and ColumnSets" begin
-            iter1 = ExpandNestedData.NestedIterator([1,2])
-            @test [1,2] == collect(iter1)
-            @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1, 2))
-            @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1, 2))
-            @test [1,2,1,2] == collect(ExpandNestedData.vcat(iter1, iter1))
+            csm = ExpandNestedData.ColumnSetManager()
+            iter1 = ExpandNestedData.RawNestedIterator(csm, [1,2])
+            @test [1,2] == collect(csm, iter1)
+            @test [1,2,1,2] == collect(csm, ExpandNestedData.cycle(iter1, 2))
+            @test [1,1,2,2] == collect(csm, ExpandNestedData.repeat_each(iter1, 2))
+            @test [1,2,1,2] == collect(csm, ExpandNestedData.vcat(iter1, iter1))
             col_set = ExpandNestedData.ColumnSet(
-                ExpandNestedData.NameID(2) => ExpandNestedData.NestedIterator([3,4,5,6]),
-                ExpandNestedData.NameID(1) => ExpandNestedData.NestedIterator([1,2]),
+                ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
+                ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2]),
             )
             @test collect(keys(col_set)) == [ExpandNestedData.NameID(1),ExpandNestedData.NameID(2)]
             col_set2 = ExpandNestedData.ColumnSet(
-                ExpandNestedData.NameID(1) => ExpandNestedData.NestedIterator([1,2,1,2]),
-                ExpandNestedData.NameID(2) => ExpandNestedData.NestedIterator([3,4,5,6]),
+                ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2,1,2]),
+                ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
             )
             @test isequal( ExpandNestedData.cycle_columns_to_length!(col_set), col_set2)
             
             # popping columns
             @test ExpandNestedData.get_first_key(col_set) == ExpandNestedData.NameID(1)
-            default_col = pop!(col_set, ExpandNestedData.NameID(3), ExpandNestedData.NestedIterator([1]))
-            @test default_col == ExpandNestedData.NestedIterator([1,1,1,1])
+            default_col = pop!(col_set, ExpandNestedData.NameID(3), ExpandNestedData.RawNestedIterator(csm, [1]))
+            @test default_col == ExpandNestedData.RawNestedIterator(csm, [1,1,1,1])
             @test isequal(col_set, col_set2)
-            popped_col = pop!(col_set, ExpandNestedData.NameID(2), ExpandNestedData.NestedIterator([1]))
-            @test popped_col == ExpandNestedData.NestedIterator([3,4,5,6])
+            popped_col = pop!(col_set, ExpandNestedData.NameID(2), ExpandNestedData.RawNestedIterator(csm, [1]))
+            @test popped_col == ExpandNestedData.RawNestedIterator(csm, [3,4,5,6])
             @test collect(keys(col_set)) == [ExpandNestedData.NameID(1)]
 
             # column length 
@@ -112,8 +113,8 @@ end
             cs = ExpandNestedData.get_column_set(csm)
             @test isempty(csm.column_sets)
 
-            cs[ExpandNestedData.NameID(3)] = ExpandNestedData.NestedIterator()
-            cs[ExpandNestedData.NameID(1)] = ExpandNestedData.NestedIterator()
+            cs[ExpandNestedData.NameID(3)] = ExpandNestedData.RawNestedIterator()
+            cs[ExpandNestedData.NameID(1)] = ExpandNestedData.RawNestedIterator()
             @test collect(keys(cs)) == [ExpandNestedData.NameID(1),ExpandNestedData.NameID(3)]
 
             name = :test_name
@@ -134,8 +135,8 @@ end
             @test ExpandNestedData.ColumnSetManagers.reconstruct_field_path(csm, id_for_tuple_from_list) == field_path
             
             # Rebuild ColumnSet
-            raw_cs = ExpandNestedData.ColumnSet(id_for_path => ExpandNestedData.NestedIterator([1]))
-            @test OrderedRobinDict((name,) => ExpandNestedData.NestedIterator([1])) == ExpandNestedData.build_final_column_set(csm, raw_cs)
+            raw_cs = ExpandNestedData.ColumnSet(id_for_path => ExpandNestedData.RawNestedIterator(csm, [1]))
+            @test OrderedRobinDict((name,) => ExpandNestedData.RawNestedIterator(csm, [1])) == ExpandNestedData.build_final_column_set(csm, raw_cs)
         end
 
         @testset "ColumnDefinitions and PathGraph" begin
@@ -147,7 +148,7 @@ end
 
             csm = ExpandNestedData.ColumnSetManager()
             simple = ExpandNestedData.SimpleNode(csm, :a)
-            value = ExpandNestedData.ValueNode(csm, :a, :a, (:a,), false, ExpandNestedData.NestedIterator([1]))
+            value = ExpandNestedData.ValueNode(csm, :a, :a, (:a,), false, ExpandNestedData.RawNestedIterator(csm, [1]))
             path_n = ExpandNestedData.PathNode(csm, :a, ExpandNestedData.Node[value])
             @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
             for (f,result) in ((
@@ -160,7 +161,7 @@ end
             end
 
             @test ExpandNestedData.get_all_value_nodes(path_n) == [value]
-            @test ExpandNestedData.get_default(value) == ExpandNestedData.NestedIterator([1])
+            @test ExpandNestedData.get_default(value) == ExpandNestedData.RawNestedIterator(csm, [1])
         end
 
         @testset "Utils" begin
@@ -243,8 +244,8 @@ end
                 path_graph = ExpandNestedData.PathGraph.make_path_graph(csm, column_defs)
                 actual_col_set = ExpandNestedData.make_missing_column_set(csm, path_graph)
                 expected_col_set = ExpandNestedData.ColumnSet(
-                    ExpandNestedData.get_id_for_path(csm, (:data, ExpandNestedData.unnamed)) => ExpandNestedData.NestedIterator([missing]),
-                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => ExpandNestedData.NestedIterator([missing])
+                    ExpandNestedData.get_id_for_path(csm, (:data, ExpandNestedData.unnamed)) => ExpandNestedData.RawNestedIterator(csm, [missing]),
+                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => ExpandNestedData.RawNestedIterator(csm, [missing])
                 )
                 isequal(actual_col_set, expected_col_set)
             end

@@ -1,7 +1,7 @@
 module ExpandNestedData
 using Base: merge!
 using DataStructures
-using DataStructures: Stack, OrderedRobinDict, cons, Cons, Nil
+using DataStructures: Stack, OrderedRobinDict
 using Logging
 using PooledArrays
 using StructTypes
@@ -19,8 +19,10 @@ Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayT
 struct ExpandMissing end
 
 function get_name end
+function get_id end
 
 include("Utils.jl")
+include("NameLists.jl")
 include("NestedIterators.jl")
 include("ColumnSetManager.jl")
 include("ColumnDefinitions.jl")

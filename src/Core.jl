@@ -52,7 +52,7 @@ function expand(data, column_definitions=nothing;
 end
 
 function create_columns(data, path_graph, csm, default_value=missing)
-    default_column = NestedIterator(default_value)
+    default_column = RawNestedIterator(csm, default_value)
     @assert length(default_column) == 1 "The default value must have a length of 1. If you want the value to have a length, try wrapping in a Tuple with `(default_val,)`"
     column_stack = ColumnSet[]
     instruction_stack = Stack{UnpackStep}()
@@ -265,6 +265,7 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
     # We go down each columnset and check if it has a matching key.
     # From there, we either pop! the column if the key matches or create a default column and add
     # it to the stack
+    vcat = NestedVcat(csm)
     while !all(length(cs)==0 for cs in columns_to_stack)
         first_key = minimum(get_first_key, columns_to_stack)
         matching_cols = (pop!(cs, first_key, default_col) for cs in columns_to_stack)
