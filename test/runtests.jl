@@ -5,8 +5,6 @@ using ExpandNestedData
 using TypedTables
 using DataStructures: OrderedRobinDict
 
-EN = ExpandNestedData
-
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
 fieldequal(::Missing, ::Missing) = true
@@ -75,11 +73,12 @@ end
     @testset "Internals" begin
         @testset "NestedIterators and ColumnSets" begin
             csm = ExpandNestedData.ColumnSetManager()
-            iter1 = ExpandNestedData.RawNestedIterator(csm, [1,2])
-            @test [1,2] == collect(csm, iter1)
-            @test [1,2,1,2] == collect(csm, ExpandNestedData.cycle(iter1, 2))
-            @test [1,1,2,2] == collect(csm, ExpandNestedData.repeat_each(iter1, 2))
-            @test [1,2,1,2] == collect(csm, ExpandNestedData.vcat(iter1, iter1))
+            iter1_2() = ExpandNestedData.RawNestedIterator(csm, [1,2])
+            @test [1,2] == collect(iter1_2(), csm)
+            @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1_2(), 2), csm)
+            @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1_2(), 2), csm)
+            ex_vcat = ExpandNestedData.NestedIterators.NestedVcat(csm)
+            @test [1,2,1,2] == collect(ex_vcat(iter1_2(), iter1_2()), csm)
             col_set = ExpandNestedData.ColumnSet(
                 ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
                 ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2]),
@@ -89,15 +88,14 @@ end
                 ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2,1,2]),
                 ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
             )
-            @test isequal( ExpandNestedData.cycle_columns_to_length!(col_set), col_set2)
-            
+            @test isequal(ExpandNestedData.cycle_columns_to_length!(col_set), col_set2, csm)
+
             # popping columns
             @test ExpandNestedData.get_first_key(col_set) == ExpandNestedData.NameID(1)
             default_col = pop!(col_set, ExpandNestedData.NameID(3), ExpandNestedData.RawNestedIterator(csm, [1]))
-            @test default_col == ExpandNestedData.RawNestedIterator(csm, [1,1,1,1])
-            @test isequal(col_set, col_set2)
+            @test isequal(default_col, ExpandNestedData.RawNestedIterator(csm, [1,1,1,1]), csm)
             popped_col = pop!(col_set, ExpandNestedData.NameID(2), ExpandNestedData.RawNestedIterator(csm, [1]))
-            @test popped_col == ExpandNestedData.RawNestedIterator(csm, [3,4,5,6])
+            @test collect(popped_col, csm) == [3,4,5,6]
             @test collect(keys(col_set)) == [ExpandNestedData.NameID(1)]
 
             # column length 
@@ -107,7 +105,7 @@ end
             # column set manager
             csm = ExpandNestedData.ColumnSetManager()
             cs = ExpandNestedData.get_column_set(csm)
-            @test isequal(cs, ExpandNestedData.ColumnSet())
+            @test isequal(cs, ExpandNestedData.ColumnSet(), csm)
             ExpandNestedData.free_column_set!(csm, cs)
             @test !isempty(csm.column_sets)
             cs = ExpandNestedData.get_column_set(csm)
@@ -126,17 +124,18 @@ end
             id_path = (id,)
             id_for_path = ExpandNestedData.get_id(csm, id_path)
             @test id_for_path == ExpandNestedData.get_id_for_path(csm, field_path)
-            
+
             # NameLinks 
             top = ExpandNestedData.top_level
             l = ExpandNestedData.NameList(csm, top, id)
             id_for_tuple_from_list = ExpandNestedData.get_id(csm, l)
             @test id_for_tuple_from_list == id_for_path
             @test ExpandNestedData.ColumnSetManagers.reconstruct_field_path(csm, id_for_tuple_from_list) == field_path
-            
+
             # Rebuild ColumnSet
             raw_cs = ExpandNestedData.ColumnSet(id_for_path => ExpandNestedData.RawNestedIterator(csm, [1]))
-            @test OrderedRobinDict((name,) => ExpandNestedData.RawNestedIterator(csm, [1])) == ExpandNestedData.build_final_column_set(csm, raw_cs)
+            finalized_col = ExpandNestedData.NestedIterator(csm, ExpandNestedData.RawNestedIterator(csm, [1]))
+            @test OrderedRobinDict((name,) => finalized_col) == ExpandNestedData.build_final_column_set(csm, raw_cs)
         end
 
         @testset "ColumnDefinitions and PathGraph" begin
@@ -153,7 +152,7 @@ end
             @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
             for (f,result) in ((
                     ExpandNestedData.PathGraph.get_final_name, ExpandNestedData.NameID(2)), 
-                    (ExpandNestedData.PathGraph.get_field_path,ExpandNestedData.NameID(3)), 
+                    (ExpandNestedData.PathGraph.get_field_path,ExpandNestedData.NameID(4)), 
                     (ExpandNestedData.PathGraph.get_pool_arrays,false))
                 @test_throws ErrorException f(simple)
                 @test_throws ErrorException f(path_n)
@@ -161,7 +160,7 @@ end
             end
 
             @test ExpandNestedData.get_all_value_nodes(path_n) == [value]
-            @test ExpandNestedData.get_default(value) == ExpandNestedData.RawNestedIterator(csm, [1])
+            @test isequal(ExpandNestedData.get_default(value), ExpandNestedData.RawNestedIterator(csm, [1]),csm)
         end
 
         @testset "Utils" begin
@@ -228,13 +227,16 @@ end
 
              # test get_column_set
              for s in (col_step,)
-                @test isequal(ExpandNestedData.get_column_set(s), ExpandNestedData.ColumnSet())
+                @test isequal(ExpandNestedData.get_column_set(s), ExpandNestedData.ColumnSet(),csm)
             end
             for s in (dict_step,array_step, default_step, leaf_step, merge_step, stack_step)
                 @test_throws ErrorException ExpandNestedData.get_column_set(s)
             end
 
-            @test isequal(ExpandNestedData.get_column_set(ExpandNestedData.empty_column_set_step(csm)), ExpandNestedData.ColumnSet())
+            @test isequal(
+                ExpandNestedData.get_column_set(ExpandNestedData.empty_column_set_step(csm)), 
+                ExpandNestedData.ColumnSet(),
+                csm)
             
             @test begin 
                 column_defs = [
@@ -247,11 +249,9 @@ end
                     ExpandNestedData.get_id_for_path(csm, (:data, ExpandNestedData.unnamed)) => ExpandNestedData.RawNestedIterator(csm, [missing]),
                     ExpandNestedData.get_id_for_path(csm, (:data, :E)) => ExpandNestedData.RawNestedIterator(csm, [missing])
                 )
-                isequal(actual_col_set, expected_col_set)
+                isequal(actual_col_set, expected_col_set,csm)
             end
-
         end
-
     end
 
     @testset "DataStructure Internals" begin
@@ -303,13 +303,13 @@ end
             )
 
     @testset "Unguided Expand" begin
-        actual_simple_table = EN.expand(simple_test_body)
+        actual_simple_table = ExpandNestedData.expand(simple_test_body)
         @test unordered_equal(actual_simple_table, expected_simple_table)
         @test eltype(actual_simple_table.data_D) == Int64
 
         # Expanding Arrays
         @test begin
-            actual_expanded_table = EN.expand(test_body)
+            actual_expanded_table = ExpandNestedData.expand(test_body)
             expected_table_expanded = (
                 a_b=[1,2,3,4,missing], 
                 a_c=[2,missing,1,1, missing], 
@@ -324,21 +324,21 @@ end
                 a_c=[2,nothing,1,1, nothing], 
                 d=[4,4,4,4,4])
                 unordered_equal(
-                EN.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
+                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
                 expected_table_expanded)
         end
-        @test (typeof(EN.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
+        @test (typeof(ExpandNestedData.expand(struct_body; pool_arrays=true, lazy_columns=false).d) == 
             typeof(PooledArray(Int64[])))
         
-        @test fieldsequal((EN.expand(struct_body; column_style=:nested) |> rows |> last), (a=(b=1,c=2), d=4))
+        @test fieldsequal((ExpandNestedData.expand(struct_body; column_style=:nested) |> rows |> last), (a=(b=1,c=2), d=4))
 
-        @test unordered_equal(EN.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
+        @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body), (data = [5], data_E = [8]))
 
         empty_dict_field = Dict(
             :a => Dict(),
             :b => 5
         )
-        @test unordered_equal(EN.expand(empty_dict_field), (b = [5],))
+        @test unordered_equal(ExpandNestedData.expand(empty_dict_field), (b = [5],))
 
         @test begin
             two_layer_deep = Dict(
@@ -349,37 +349,37 @@ end
                     )
                 )
             )
-            unordered_equal(EN.expand(two_layer_deep), (a_b_c = [1], a_b_d = [2]))
+            unordered_equal(ExpandNestedData.expand(two_layer_deep), (a_b_c = [1], a_b_d = [2]))
         end
     end
 
 
     @testset "Configured Expand" begin
         columns_defs = [
-            EN.ColumnDefinition((:d,)),
-            EN.ColumnDefinition((:a, :b)),
-            EN.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
-            EN.ColumnDefinition((:e, :f); default_value="Missing branch")
+            ExpandNestedData.ColumnDefinition((:d,)),
+            ExpandNestedData.ColumnDefinition((:a, :b)),
+            ExpandNestedData.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+            ExpandNestedData.ColumnDefinition((:e, :f); default_value="Missing branch")
             ]
         expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
             :e_f => repeat(["Missing branch"], 5))
         )
-        @test unordered_equal(EN.expand(test_body, columns_defs), expected_table)
+        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs), expected_table)
         @test fieldsequal(
-            EN.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
+            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested) |> rows |> last, 
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
         columns_defs = [
-            EN.ColumnDefinition((:data,)),
-            EN.ColumnDefinition((:data, :E))
+            ExpandNestedData.ColumnDefinition((:data,)),
+            ExpandNestedData.ColumnDefinition((:data, :E))
         ]
-        @test unordered_equal(EN.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+        @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
 
     end
 
     @testset "superficial options" begin
         # Expanding Arrays
-        actual_expanded_table = EN.expand(test_body; name_join_pattern = "?_#")
+        actual_expanded_table = ExpandNestedData.expand(test_body; name_join_pattern = "?_#")
         @test begin
             expected_table_expanded = NamedTuple((
                 Symbol("a?_#b")=>[1,2,3,4,missing], 

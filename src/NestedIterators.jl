@@ -14,6 +14,7 @@ export RawNestedIterator, NestedIterator, seed, repeat_each, cycle, NestedVcat
 end
 
 mutable struct RawNestedIterator
+    # todo use linked list 
     get_index::Vector{IterCapture}
     column_length::Int64
     el_type::Type
@@ -36,27 +37,39 @@ function RawNestedIterator(csm, data::T; total_length::Int=0, default_value=miss
     else
         (data,)
     end
-    id = get_id(csm, value)
+    is_one = allequal(value)
     len = length(value)
     val_T = typeof(value)
-    ncycle = total_length < 1 ? 1 : total_length ÷ len
-    return RawNestedIterator(id, val_T, len, ncycle)
+    id = get_id(csm, value)
+    ncycle = total_length == 0 ? 1 : total_length ÷ len
+    return RawNestedIterator(id, val_T, is_one, len, ncycle)
 end
 
-function RawNestedIterator(value_id::NameID, ::Type{T}, len::Int64, ncycle::Int64) where T
+function RawNestedIterator(value_id::NameID, ::Type{T}, is_one::Bool, len::Int64, ncycle::Int64) where T
     E = eltype(T)
-    f = IterCapture[IterCapture'.RawSeed(value_id), IterCapture'.RawCycle(ncycle)]
-    is_one = len == 1
-    unique_val = value_id
+    f = IterCapture[IterCapture'.RawSeed(value_id), IterCapture'.RawCycle(len)]
     unique_val = is_one ? value_id : no_name_id
-
-    return RawNestedIterator(f, len, E, is_one, unique_val)
+    return RawNestedIterator(f, len*ncycle, E, is_one, unique_val)
 end
 RawNestedIterator() = RawNestedIterator(IterCapture[], 0, Union{}, false, no_name_id)
 
 Base.length(rni::RawNestedIterator) = rni.column_length
 Base.size(rni::RawNestedIterator) = (rni.column_length,)
 Base.collect(rni::RawNestedIterator, csm) = collect(NestedIterator(csm, rni))
+Base.isequal(::RawNestedIterator, ::RawNestedIterator) = throw(ErrorException("To compare RawNestedIterator with RawNestedIterators, you must pass a ColumnSetManager."))
+function Base.isequal(rni1::RawNestedIterator, rni2::RawNestedIterator, csm)
+    rni1.column_length == rni2.column_length || return false
+    rni1.el_type === rni2.el_type || return false
+    if rni1.one_value != rni2.one_value
+        return false
+    else
+        rni1.unique_val == rni2.unique_val && return true
+        # if one iter was seeded with (1,) but the other was seeded with [1], the unique_val ids
+        # will be different, so we need to check the actual values
+        isequal(first(get_name(csm, rni1.unique_val)), first(get_name(csm,rni2.unique_val))) && return true
+    end
+    return isequal(collect(rni1, csm), collect(rni2, csm))
+end
 
 abstract type InstructionCapture <: Function end
 
@@ -93,12 +106,13 @@ end
 (u::Uncycle)(i) = mod((i-1),u.n) + 1
 """cycle(c, n) cycles through an array N times"""
 function cycle(c::RawNestedIterator, n)
+    original_len = c.column_length
     # when there is only one unique value, we can skip composing the uncycle step
     c.column_length *= n
     if c.one_value
         return c
     end
-    push!(c.get_index,IterCapture'.RawCycle(n))
+    push!(c.get_index,IterCapture'.RawCycle(original_len))
     return c
 end
 

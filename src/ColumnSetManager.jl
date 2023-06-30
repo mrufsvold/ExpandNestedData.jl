@@ -85,7 +85,10 @@ end
 Base.keys(cs::ColumnSet) = (first(p) for p in cs.cols)
 Base.values(cs::ColumnSet) = (last(p) for p in cs.cols)
 Base.pairs(cs::ColumnSet) = (p for p in cs.cols)
-Base.isequal(cs::ColumnSet, o::ColumnSet) = all(isequal.(pairs(cs), pairs(o)))
+Base.isequal(::ColumnSet, ::ColumnSet) = throw(ErrorException("To compare ColumnSet with ColumnSet, you must pass a ColumnSetManager."))
+function Base.isequal(cs::ColumnSet, o::ColumnSet, csm)
+    all(isequal.(keys(cs), keys(o))) && all(isequal.(values(cs), values(o), Ref(csm)))
+end
 
 Base.length(cs::ColumnSet) = length(cs.cols)
 Base.insert!(cs::ColumnSet, p::Pair) = insert!(cs.cols, searchsortedfirst(cs.cols, p; by=first), p)
