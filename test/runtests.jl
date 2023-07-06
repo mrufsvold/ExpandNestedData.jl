@@ -125,9 +125,9 @@ end
             id_for_path = ExpandNestedData.get_id(csm, id_path)
             @test id_for_path == ExpandNestedData.get_id_for_path(csm, field_path)
 
-            # NameLinks 
-            top = ExpandNestedData.top_level
-            l = ExpandNestedData.NameList(csm, top, id)
+            # NameLists 
+            top = ExpandNestedData.NameList()
+            l = ExpandNestedData.NameList(top, id)
             id_for_tuple_from_list = ExpandNestedData.get_id(csm, l)
             @test id_for_tuple_from_list == id_for_path
             @test ExpandNestedData.ColumnSetManagers.reconstruct_field_path(csm, id_for_tuple_from_list) == field_path
@@ -182,7 +182,7 @@ end
 
         @testset "Core" begin
             csm = ExpandNestedData.ColumnSetManager()
-            name_list = ExpandNestedData.NameList(0)
+            name_list = ExpandNestedData.NameList()
             node = ExpandNestedData.SimpleNode(ExpandNestedData.NameID(0))
             col_num = 5
             dict_step = ExpandNestedData.DictStep(name_list, Dict(), node)

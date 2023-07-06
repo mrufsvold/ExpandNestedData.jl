@@ -1,10 +1,10 @@
 module ColumnSetManagers
 using DataStructures: OrderedRobinDict, Stack
-using ..NameLists: NameID, NameList, NameLink, top_level, top_level_id, unnamed_id, unnamed, max_id
+using ..NameLists: NameID, NameList, top_level_id, unnamed_id, unnamed, max_id
 using ..NestedIterators
 import ..get_name
 import ..get_id
-export NameID, NameList, top_level, top_level_id, unnamed, unnamed_id
+export NameID, NameList, top_level_id, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length, set_length!
 export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
 
@@ -123,25 +123,19 @@ struct ColumnSetManager{T}
     name_to_id::OrderedRobinDict{Any, NameID}
     id_generator::T
     column_sets::Stack{ColumnSet}
-    name_list_links::Vector{NameLink}
     name_list_collector::Vector{NameID}
-    link_i_generator::T
 end
 function ColumnSetManager()
     name_to_id = OrderedRobinDict{Any, NameID}(unnamed => unnamed_id)
     id_generator = Iterators.Stateful(Iterators.countfrom(2))
     column_sets = Stack{ColumnSet}()
-    name_list_links = NameLink[]
     name_list_collector = NameID[]
-    link_i_generator = Iterators.Stateful(Iterators.countfrom())
     return ColumnSetManager(
         name_to_id, 
         id_generator, 
         column_sets, 
-        name_list_links, 
         name_list_collector, 
-        link_i_generator
-        )
+    )
 end
 
 
@@ -174,11 +168,10 @@ end
 
 function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
     empty!(csm.name_list_collector)
-    id::Int64 = name_list.i
-    @inbounds while id != 0
-        link = csm.name_list_links[id]
-        push!(csm.name_list_collector, link.name_id)
-        id = link.tail_i
+    head::NameList = name_list
+    while head.i != top_level_id
+        push!(csm.name_list_collector, head.i)
+        head = head.tail_i
     end
     # need to reverse field path because we stack the last on top as we descend through the data structure
     return Iterators.reverse(csm.name_list_collector)
