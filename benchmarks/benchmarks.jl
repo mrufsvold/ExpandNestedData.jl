@@ -1,5 +1,4 @@
 using ExpandNestedData
-using TypedTables
 
 small_dict = Dict(
     :a => 1,
