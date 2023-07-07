@@ -1,59 +1,27 @@
 module ColumnSetManagers
 using DataStructures: OrderedRobinDict, Stack
+using ..NameLists: NameID, NameList, top_level_id, unnamed_id, unnamed, max_id
 using ..NestedIterators
 import ..get_name
-export NameID, NameList, top_level, top_level_id, unnamed, unnamed_id
+import ..get_id
+import ..collect_tuple
+export NameID, NameList, top_level_id, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length, set_length!
 export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
 
-#### Linked List for Key/Names ####
-###################################
-# An ID refering to a key/name in the input
-struct NameID
-    id::Int64
-end
-Base.isless(n::NameID, o::NameID) = n.id < o.id
-# A link in a list of name IDs
-struct NameLink
-    tail_i::Int64
-    name_id::NameID
-end
-# Points to current head of a NameList
-struct NameList
-    i::Int64
-end
-function NameList(csm, name_list::NameList, new_id::NameID)
-    name_list_links = csm.name_list_links
-    prev_i = name_list.i
-    push!(name_list_links, NameLink(prev_i, new_id))
-    return NameList(first(csm.link_i_generator))
-end
 
-
-#### Constants ####
-###################
-
-"""A null NameList for the top level input"""
-const top_level = NameList(0)
-"""A NameID for TOP_LEVEL"""
-const top_level_id = NameID(0)
-"""the id for unnamed key. This happens when an array has loose values and containers"""
-const unnamed_id = NameID(1)
-"""the name to use for unnamed keys"""
-const unnamed = :expand_nested_data_unnamed
-const max_id = NameID(typemax(Int64))
 
 #### ColumnSet ####
 ###################
 """A dict-like set of columns. The keys are Int64 ids for actual names that are stored
 in the ColumnSetManager"""
 mutable struct ColumnSet
-    cols::Vector{Pair{NameID, NestedIterator}}
+    cols::Vector{Pair{NameID, RawNestedIterator}}
     len::Int64
 end
-ColumnSet() = ColumnSet(Pair{NameID, NestedIterator}[], 0)
+ColumnSet() = ColumnSet(Pair{NameID, RawNestedIterator}[], 0)
 function ColumnSet(p::Pair...)
-    cs = ColumnSet(Pair{NameID, NestedIterator}[p...], 0)
+    cs = ColumnSet(Pair{NameID, RawNestedIterator}[p...], 0)
     sort_keys!(cs)
     reset_length!(cs)
     return cs
@@ -84,11 +52,11 @@ end
 
 
 """
-    get_column!(cols::ColumnSet, name, default::NestedIterator)
+    get_column!(cols::ColumnSet, name, default::RawNestedIterator)
 Get a column from a set with a given name, if no column with that name is found
 construct a new column with same length as column set
 """
-function Base.pop!(cols::ColumnSet, name_id::NameID, default::NestedIterator)
+function Base.pop!(cols::ColumnSet, name_id::NameID, default::RawNestedIterator)
     return if haskey(cols,name_id)
         last(pop!(cols,name_id))
     else
@@ -118,7 +86,10 @@ end
 Base.keys(cs::ColumnSet) = (first(p) for p in cs.cols)
 Base.values(cs::ColumnSet) = (last(p) for p in cs.cols)
 Base.pairs(cs::ColumnSet) = (p for p in cs.cols)
-Base.isequal(cs::ColumnSet, o::ColumnSet) = all(isequal.(pairs(cs), pairs(o)))
+Base.isequal(::ColumnSet, ::ColumnSet) = throw(ErrorException("To compare ColumnSet with ColumnSet, you must pass a ColumnSetManager."))
+function Base.isequal(cs::ColumnSet, o::ColumnSet, csm)
+    all(isequal.(keys(cs), keys(o))) && all(isequal.(values(cs), values(o), Ref(csm)))
+end
 
 Base.length(cs::ColumnSet) = length(cs.cols)
 Base.insert!(cs::ColumnSet, p::Pair) = insert!(cs.cols, searchsortedfirst(cs.cols, p; by=first), p)
@@ -153,25 +124,19 @@ struct ColumnSetManager{T}
     name_to_id::OrderedRobinDict{Any, NameID}
     id_generator::T
     column_sets::Stack{ColumnSet}
-    name_list_links::Vector{NameLink}
     name_list_collector::Vector{NameID}
-    link_i_generator::T
 end
 function ColumnSetManager()
     name_to_id = OrderedRobinDict{Any, NameID}(unnamed => unnamed_id)
     id_generator = Iterators.Stateful(Iterators.countfrom(2))
     column_sets = Stack{ColumnSet}()
-    name_list_links = NameLink[]
     name_list_collector = NameID[]
-    link_i_generator = Iterators.Stateful(Iterators.countfrom())
     return ColumnSetManager(
         name_to_id, 
         id_generator, 
         column_sets, 
-        name_list_links, 
         name_list_collector, 
-        link_i_generator
-        )
+    )
 end
 
 
@@ -198,17 +163,16 @@ Get an id for the linked list of ids that constitute a field path in the core lo
 """
 function get_id(csm::ColumnSetManager, name_list::NameList)
     field_path = collect_name_ids(csm::ColumnSetManager, name_list::NameList)
-    path_tuple = tuple((i for i in field_path)...)
+    path_tuple = collect_tuple(field_path)
     return get_id(csm, path_tuple)
 end
 
 function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
     empty!(csm.name_list_collector)
-    id::Int64 = name_list.i
-    @inbounds while id != 0
-        link = csm.name_list_links[id]
-        push!(csm.name_list_collector, link.name_id)
-        id = link.tail_i
+    head::NameList = name_list
+    while head.i != top_level_id
+        push!(csm.name_list_collector, head.i)
+        head = head.tail_i
     end
     # need to reverse field path because we stack the last on top as we descend through the data structure
     return Iterators.reverse(csm.name_list_collector)
@@ -283,10 +247,10 @@ end
 
 """
     init_column_set(csm::ColumnSetManager, name::Cons{Int64}, data)
-Create a new ColumnSet containing an id for name and a NestedIterator around data
+Create a new ColumnSet containing an id for name and a RawNestedIterator around data
 """
 function init_column_set(csm::ColumnSetManager, name::NameList, data)
-    col = NestedIterator(data)
+    col = RawNestedIterator(csm, data)
     cs = get_column_set(csm)
     id = get_id(csm, name)
     cs[id] = col
@@ -303,7 +267,7 @@ function build_final_column_set(csm::ColumnSetManager, raw_cs)
     final_cs = OrderedRobinDict{Tuple, NestedIterator}()
     for (raw_id, column) in pairs(raw_cs)
         field_path = reconstruct_field_path(csm, raw_id)
-        final_cs[field_path] = column
+        final_cs[field_path] = NestedIterator(csm, column)
     end
     return final_cs
 end

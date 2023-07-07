@@ -52,12 +52,12 @@ function expand(data, column_definitions=nothing;
 end
 
 function create_columns(data, path_graph, csm, default_value=missing)
-    default_column = NestedIterator(default_value)
+    default_column = RawNestedIterator(csm, default_value)
     @assert length(default_column) == 1 "The default value must have a length of 1. If you want the value to have a length, try wrapping in a Tuple with `(default_val,)`"
     column_stack = ColumnSet[]
     instruction_stack = Stack{UnpackStep}()
     
-    push!(instruction_stack, wrap_object(top_level, data, path_graph))
+    push!(instruction_stack, wrap_object(NameList(), data, path_graph))
 
     while !isempty(instruction_stack)
         step = pop!(instruction_stack)
@@ -133,7 +133,7 @@ function process_dict!(parent_name_list, data, node, instruction_stack, csm)
     for child_node in child_nodes
         name_id = get_name(child_node)
         @debug "getting information for child" name=name node=child_node
-        name_list = NameList(csm, parent_name_list, name_id)
+        name_list = NameList(parent_name_list, name_id)
         # TODO we have to do this lookup twice (once to make id, once to get name back)
         # it would be better to zip up the name_ids with the values as they're constructed
         name = get_name(csm, name_id)
@@ -160,8 +160,8 @@ If it is all "values", return it to be processed as a leaf
 If it is a mix, take the loose "values" and process as a leaf. Then merge that ColumnSet with
     the ColumnSet resulting from stacking the containers.
 """
-function process_array!(name_list, arr::T, node, instruction_stack, csm) where T
-    element_count = length(arr)
+function process_array!(name_list, arr::T, node, instruction_stack, csm) where {T <: AbstractArray}
+    element_count = length(arr)::Int64
     @debug "Processing array" dtype=T arr_len=element_count
     if element_count == 0
         # If we have column defs, but the array is empty, that means we need to make a 
@@ -204,7 +204,7 @@ function process_array!(name_list, arr::T, node, instruction_stack, csm) where T
         loose_values = view(arr, .!is_container_mask)
         next_step = length(loose_values) == 0 ?
             missing_column_set_step(csm, node) :
-            wrap_object(NameList(csm, name_list, unnamed_id), loose_values, node, LeafStep)
+            wrap_object(NameList(name_list, unnamed_id), loose_values, node, LeafStep)
         @debug "loose values" next_step=next_step
         push!(instruction_stack, next_step)
     end
@@ -265,6 +265,7 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
     # We go down each columnset and check if it has a matching key.
     # From there, we either pop! the column if the key matches or create a default column and add
     # it to the stack
+    vcat = NestedVcat(csm)
     while !all(length(cs)==0 for cs in columns_to_stack)
         first_key = minimum(get_first_key, columns_to_stack)
         matching_cols = (pop!(cs, first_key, default_col) for cs in columns_to_stack)

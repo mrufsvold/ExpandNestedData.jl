@@ -1,7 +1,7 @@
 module PathGraph
 using SumTypes
 using ..ColumnSetManagers: ColumnSetManager, NameID, get_id, unnamed_id, unnamed, top_level_id, get_id_for_path
-using ..NestedIterators: NestedIterator
+using ..NestedIterators: RawNestedIterator
 using ..ColumnDefinitions
 using ..ColumnDefinitions:  ColumnDefinition, 
                             get_unique_current_names, 
@@ -18,17 +18,17 @@ export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_va
 
 @sum_type Node :hidden begin
     Path(::NameID, ::Vector{Node})
-    Value(::NameID, ::NameID, ::NameID, ::Bool, ::Ref{NestedIterator{<:Any, <:Any}})
+    Value(::NameID, ::NameID, ::NameID, ::Bool, ::Ref{RawNestedIterator})
     Simple(::NameID)
 end
 
 PathNode(csm::ColumnSetManager, name, children::Vector{Node}) = PathNode(get_id(csm, name), children)
 PathNode(name::NameID, children::Vector{Node}) = Node'.Path(name, children)
 
-function ValueNode(csm::ColumnSetManager, name, final_name, field_path, pool_arrays::Bool, default::NestedIterator)
+function ValueNode(csm::ColumnSetManager, name, final_name, field_path, pool_arrays::Bool, default::RawNestedIterator)
     ValueNode(get_id(csm, name),  get_id(csm, final_name),  get_id_for_path(csm, field_path), pool_arrays, default)
 end
-ValueNode(name::NameID, final_name::NameID, field_path::NameID, pool_arrays::Bool, default::NestedIterator) = Node'.Value(name, final_name, field_path, pool_arrays, Ref{NestedIterator{<:Any, <:Any}}(default))
+ValueNode(name::NameID, final_name::NameID, field_path::NameID, pool_arrays::Bool, default::RawNestedIterator) = Node'.Value(name, final_name, field_path, pool_arrays, Ref{RawNestedIterator}(default))
 
 SimpleNode(csm::ColumnSetManager, name) = SimpleNode(get_id(csm, name))
 SimpleNode(name::NameID) = Node'.Simple(name)
@@ -115,7 +115,7 @@ function extract_path_node!(csm, column_defs, unique_name, level)
         # If we got to a value node, there should only be one.
         def = first(matching_defs)
         return ValueNode(
-            csm, unique_name, get_column_name(def), get_field_path(def), get_pool_arrays(def), NestedIterator(get_default_value(def))
+            csm, unique_name, get_column_name(def), get_field_path(def), get_pool_arrays(def), RawNestedIterator(csm, get_default_value(def))
         )
     end
 
@@ -132,7 +132,7 @@ function extract_path_node!(csm, column_defs, unique_name, level)
             get_column_name(without_child),
             (get_field_path(without_child)..., unnamed), 
             get_pool_arrays(without_child),
-            NestedIterator(get_default_value(without_child))
+            RawNestedIterator(csm, get_default_value(without_child))
         )
         push!(child_nodes, value_column_node)
     end
