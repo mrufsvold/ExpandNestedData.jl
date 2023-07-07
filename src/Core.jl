@@ -1,5 +1,3 @@
-using DataStructures: Stack
-
 """
     expand(data, column_defs=nothing; 
             default_value = missing, 
@@ -33,14 +31,17 @@ function expand(data, column_definitions=nothing;
         name_join_pattern = "_")
 
     typed_column_style = get_column_style(column_style)
-    path_graph = make_path_graph(column_definitions)
-    columns = create_columns(data, path_graph; default_value=default_value)
+    csm = ColumnSetManager()
+    path_graph = make_path_graph(csm, column_definitions)
+
+    raw_columns = create_columns(data, path_graph, csm, default_value)
+    columns = build_final_column_set(csm, raw_columns)
 
     final_path_graph = column_definitions isa Nothing ?
-        make_path_graph(construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)) :
+        make_path_graph(csm, construct_column_definitions(columns, column_names, pool_arrays, name_join_pattern)) :
         path_graph
 
-    expanded_table = ExpandedTable(columns, final_path_graph; lazy_columns=lazy_columns, pool_arrays=pool_arrays)
+    expanded_table = ExpandedTable(columns, final_path_graph, csm; lazy_columns=lazy_columns, pool_arrays=pool_arrays)
 
     final_table = if typed_column_style == flat_columns
         as_flat_table(expanded_table)
@@ -50,82 +51,105 @@ function expand(data, column_definitions=nothing;
     return final_table
 end
 
-"""Wrap an object in the correct UnpackStep"""
-function wrap_object(name::N, data::T, level::Int64, path_node::C, step_type::S=nothing) where {N,T,C,S}
-    if T <: ExpandMissing
-        return default_object(name, level, path_node)
-    end
-    struct_t = typeof(StructTypes.StructType(T))
-    obj_type = if S <: StepType
-        step_type
-    elseif struct_t <: StructTypes.ArrayType
-        arr
-    elseif struct_t <: NameValueContainer
-        dict
-    else
-        leaf
-    end
-    return UnpackStep{N,T,C}(obj_type, name, data, level, path_node)
-end
-
-# Helper functions for building Unpack steps
-default_object(name::N, level, path_node::C) where {N,C} = UnpackStep{N, Nothing, C}(default, name, nothing, level, path_node)
-stack_instruction(name::N, col_n, level) where N = UnpackStep{N, Int64, Nothing}(stack_cols, name, col_n, level, nothing)
-merge_instruction(name::N, col_n, level) where N = UnpackStep{N, Int64, Nothing}(merge_cols, name, col_n, level, nothing)
-column_set_step(cols::T) where T = UnpackStep{Nothing, T, Nothing}(columns, nothing, cols, 0, nothing)
-
-
-function create_columns(data, path_graph; default_value=missing, kwargs...)
-    default_column = NestedIterator(default_value)
+function create_columns(data, path_graph, csm, default_value=missing)
+    default_column = RawNestedIterator(csm, default_value)
     @assert length(default_column) == 1 "The default value must have a length of 1. If you want the value to have a length, try wrapping in a Tuple with `(default_val,)`"
     column_stack = ColumnSet[]
     instruction_stack = Stack{UnpackStep}()
-    push!(instruction_stack, wrap_object(:top_level, data, 0, path_graph))
+    
+    push!(instruction_stack, wrap_object(NameList(), data, path_graph))
 
     while !isempty(instruction_stack)
         step = pop!(instruction_stack)
-        dispatch_step!(step, default_column, column_stack, instruction_stack)
+        dispatch_step!(step, default_column, column_stack, instruction_stack, csm)
     end
     @assert length(column_stack) == 1 "Internal Error, more than one column stack resulted"
     return first(column_stack)
 end 
 
+
+
 """
     dispatch_step!(step, default_column, column_stack, instruction_stack)
 Generic dispatch to the correct function for this step
 """
-function dispatch_step!(step, default_column, column_stack, instruction_stack)
-    step_type = get_step_type(step)
-
-    if step_type == columns
-        push!(column_stack, get_data(step))
-    elseif step_type == default
-        level = get_level(step)
-        col_set = columnset(default_column, level)
-        prepend_name!(col_set, get_name(step), level)
-        push!(column_stack, col_set)
-    elseif step_type == merge_cols
-        merge_cols!(step, column_stack)
-    elseif step_type == stack_cols
-        stack_cols!(step, column_stack, default_column)
-    elseif step_type == dict
-        process_dict!(step, instruction_stack)
-    elseif step_type == arr
-        process_array!(step, instruction_stack)
-    elseif step_type == leaf
-        process_leaf!(step, instruction_stack)
+function dispatch_step!(step, default_column, column_stack, instruction_stack, csm)
+    @debug "dispatching" step=step
+    @cases step begin
+        DictStep(n,d,p) => process_dict!(n, d, p, instruction_stack, csm)
+        ArrayStep(n,d,p) => process_array!(n, d, p, instruction_stack, csm)
+        LeafStep(n,d) => process_leaf!(n, d, instruction_stack, csm)
+        DefaultStep(n) => create_default_column_set!(n, default_column, column_stack, csm)
+        MergeStep(d) => merge_cols!(d, column_stack, csm)
+        StackStep(d) => stack_cols!(d, column_stack, default_column, csm)
+        NewColumnSetStep(cs) => push!(column_stack, cs)
     end
     return nothing
 end
 
 """
-process_leaf!(step, instruction_stack)
+    process_leaf!(step, instruction_stack, csm)
 Take a value at the end of a path and wrap it in a new ColumnSet
 """
-function process_leaf!(step, instruction_stack)
-    push!(instruction_stack, column_set_step(init_column_set(step)))
+function process_leaf!(name_list, data, instruction_stack, csm)
+    push!(instruction_stack, init_column_set_step(csm, name_list, data))
 end 
 
+"""
+    create_default_column_set!(step, default_column, column_stack, csm)
+Build a column set with a single column which is the default column for the run
+"""
+function create_default_column_set!(name_list, default_column, column_stack, csm)
+    name_id = get_id(csm, name_list)
+    col_set = get_column_set(csm)
+    col_set[name_id] = default_column
+    push!(column_stack, col_set)
+end
+
+"""
+    process_dict!(step::UnpackStep, instruction_stack)
+
+Handle a NameValuePair container (struct or dict) by calling process on all values with a 
+new UnpackStep that has a name matching the key. If ColumnDefinitions are provided, then
+only grab the keys that apply and add default columns where a key is missing.
+"""
+function process_dict!(parent_name_list, data, node, instruction_stack, csm)
+    data_name_ids = get_id.(Ref(csm), get_names(data))
+    @debug "processing NameValueContainer" step_type=:dict  dtype=typeof(data) key_ids=data_name_ids
+
+    child_nodes = @cases node begin
+        Path => [c for c in get_children(node) if get_name(c) != unnamed_id]
+        Value => throw(ErrorException("Got value node in process_dict, should have been passed to process_leaf"))
+        Simple => (SimpleNode(id) for id in data_name_ids)
+    end
+
+    if length(child_nodes) == 0
+        push!(instruction_stack, empty_column_set_step(csm))
+        return nothing
+    end
+
+    push!(instruction_stack, MergeStep(length(child_nodes)))
+
+    for child_node in child_nodes
+        name_id = get_name(child_node)
+        @debug "getting information for child" name=name node=child_node
+        name_list = NameList(parent_name_list, name_id)
+        # TODO we have to do this lookup twice (once to make id, once to get name back)
+        # it would be better to zip up the name_ids with the values as they're constructed
+        name = get_name(csm, name_id)
+        child_data = get_value(data, name, ExpandMissing())
+        @debug "child data retrieved" data=child_data
+        data_has_name = name_id in data_name_ids 
+        next_step = @cases child_node begin
+            Path => wrap_container_val(data_has_name, name_list, child_data, child_node, csm)
+            Value => wrap_object(name_list, child_data, child_node, LeafStep)
+            Simple => wrap_object(name_list, child_data, child_node)
+        end
+        @debug "Adding next step" child_name=name step=next_step
+        push!(instruction_stack, next_step)
+    end
+    return nothing
+end
 
 """ 
 process_array!(step::UnpackStep, instruction_stack)
@@ -136,26 +160,25 @@ If it is all "values", return it to be processed as a leaf
 If it is a mix, take the loose "values" and process as a leaf. Then merge that ColumnSet with
     the ColumnSet resulting from stacking the containers.
 """
-function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
-    arr = get_data(step)
-    name = get_name(step)
-    level = get_level(step)
-    path_node = get_path_node(step)
-    element_count = length(arr)
-
+function process_array!(name_list, arr::T, node, instruction_stack, csm) where {T <: AbstractArray}
+    element_count = length(arr)::Int64
+    @debug "Processing array" dtype=T arr_len=element_count
     if element_count == 0
         # If we have column defs, but the array is empty, that means we need to make a 
         # missing column_set
-        next_step = !(C <: Union{SimpleNode, Nothing}) ?
-            column_set_step(make_missing_column_set(path_node)) :
-            default_object(name, level, path_node)
-        push!(instruction_stack, next_step)
+        @cases node begin
+            [Path,Value] => empty_arr_path!(csm, node, instruction_stack)
+            Simple => empty_arr_simple!(name_list, instruction_stack)
+        end
         return nothing
     elseif element_count == 1
-        push!(instruction_stack, wrap_object(name, first(arr), level, path_node))
+        @cases node begin 
+            [Path,Value,Simple] => push!(instruction_stack, wrap_object(name_list, first(arr), node))
+        end
+        
         return nothing
     elseif all_eltypes_are_values(T)
-        push!(instruction_stack, column_set_step(init_column_set(arr, name, level)))
+        push!(instruction_stack, init_column_set_step(csm, name_list, arr))
         return nothing
     end
 
@@ -164,84 +187,50 @@ function process_array!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C
     # Arrays with a mix need to be split and processed separately
     is_container_mask = is_container.(arr)
     container_count = sum(is_container_mask)
-    no_containers = container_count == 0
-    all_containers = container_count == element_count
-
+    all_containers, no_containers = @cases node begin
+        Simple => (container_count == element_count, container_count == 0)
+        Value => (false, true)
+        Path(_,c) => calculate_container_status_for_path_node(c, container_count)
+    end
+    @debug "element_types" all_containers=all_containers no_containers=no_containers
     if no_containers
-        push!(instruction_stack, column_set_step(init_column_set(arr, name, level)))
+        push!(instruction_stack, init_column_set_step(csm, name_list, arr))
         return nothing
     end
 
     # The loose values will need to by merged into the stacked objects below
     if !all_containers
-        push!(instruction_stack, merge_instruction(name, 2, level))
-        loose_values = [e for (f,e) in zip(is_container_mask, arr) if !f]
-        push!(instruction_stack, wrap_object(:unnamed, loose_values, level+1, path_node, leaf))
-    end
-
-    push!(instruction_stack, stack_instruction(name, container_count, level))
-
-    containers = all_containers ? arr : [e for (f,e) in zip(is_container_mask, arr) if f]
-    for container in containers
-        push!(instruction_stack, wrap_object(name, container, level, path_node))
-    end
-end
-
-"""
-    process_dict!(step::UnpackStep, instruction_stack)
-
-Handle a NameValuePair container (struct or dict) by calling process on all values with a 
-new UnpackStep that has a name matching the key. If ColumnDefinitions are provided, then
-only grab the keys that apply and add default columns where a key is missing.
-"""
-function process_dict!(step::UnpackStep{N,T,C}, instruction_stack) where {N,T,C}
-    data = get_data(step)
-    level = get_level(step)
-    column_defs_provided = !(C <: Union{Nothing, SimpleNode})
-    path_node = get_path_node(step)
-    data_names = get_names(data)
-
-    child_nodes = column_defs_provided ? get_children(path_node) : SimpleNode.(data_names)
-
-    names_num = length(child_nodes)
-    if names_num == 0
-        push!(instruction_stack, column_set_step(ColumnSet()))
-        return nothing
-    end
-    push!(instruction_stack, merge_instruction(get_name(step), length(child_nodes), level))
-
-    for child_node in child_nodes
-        name = get_name(child_node)
-        # both are always true when unguided
-        should_have_child = !(child_node isa ValueNode)
-        data_has_name = name in data_names
-        child_data = get_value(data, name, ExpandMissing())
-
-        # CASE 1: Expected a child node and found one, unpack it (captures all unguided)
-        next_step = if should_have_child && data_has_name
-            wrap_object(name, child_data, level+1, child_node)
-        # CASE 2: Expected a child node, but don't find it 
-        elseif should_have_child && !data_has_name
-            column_set_step(make_missing_column_set(child_node))
-        # CASE 3: We don't expect a child node: wrap any value in a new column
-        elseif !should_have_child
-            wrap_object(name, child_data, level+1, child_node, leaf)
-        end
+        push!(instruction_stack, MergeStep(2))
+        loose_values = view(arr, .!is_container_mask)
+        next_step = length(loose_values) == 0 ?
+            missing_column_set_step(csm, node) :
+            wrap_object(NameList(name_list, unnamed_id), loose_values, node, LeafStep)
+        @debug "loose values" next_step=next_step
         push!(instruction_stack, next_step)
     end
-    return nothing
+
+    container_count > 1 && push!(instruction_stack, StackStep(container_count))
+
+    containers = view(arr, is_container_mask)
+    for container in containers
+        next_step = wrap_object(name_list, container, node)
+        @debug "adding container element" next_step=next_step
+        push!(instruction_stack, next_step)
+    end
 end
+
+
 
 ###########
 """
-    merge_cols!(step, column_stack)
+    merge_cols!(step, column_stack, csm)
 Take N ColumnSets from the column_stack and merge them. This means repeating the values of
 each ColumnSet such that you get the Cartesian Product of their join.
 """
-function merge_cols!(step, column_stack)
+function merge_cols!(set_num, column_stack, csm)
     col_set = pop!(column_stack)
     multiplier = 1
-    for _ in 2:get_data(step)
+    for _ in 2:set_num
         new_col_set = pop!(column_stack)
         if length(new_col_set) == 0
             continue
@@ -250,36 +239,46 @@ function merge_cols!(step, column_stack)
         # to make a product of values
         repeat_each_column!(new_col_set, multiplier)
         multiplier *= column_length(new_col_set)
-        merge!(col_set, new_col_set)
+        merge!(csm, col_set, new_col_set)
     end
     if length(col_set) > 1
         # catch up short columns with the total length for this group
         cycle_columns_to_length!(col_set)
     end
-    prepend_name!(col_set, get_name(step), get_level(step))
     push!(column_stack, col_set)
     return nothing
 end
 
 """
-    stack_cols!(step, column_stack, default_col)
+    stack_cols!(step, column_stack, default_col, csm)
 Take the ColumnSets that were created by processing the elements of an array and stack them together.
 If a column name is present in one set but not in the other, then insert a default column.
 """
-function stack_cols!(step, column_stack, default_col)
-    columns_to_stack = @view column_stack[end-get_data(step)+1:end]
-    prepend_name!.(columns_to_stack, Ref(get_name(step)), get_level(step))
-    unique_names = columns_to_stack .|> keys |> Iterators.flatten |> unique
-    column_set = ColumnSet()
-    for name in unique_names
-        # For each unique column name, get that column for the results of processing each element
-        # in this array, and then stack them all
-        column_set[name] = columns_to_stack         .|>
-            (col_set -> get_column(col_set, name, default_col))  |>
-            (cols -> foldl(stack, cols))
+function stack_cols!(column_set_num, column_stack, default_col, csm)
+    columns_to_stack = @view column_stack[end-column_set_num+1:end]
+
+    new_column_set = get_column_set(csm)
+    total_len = get_total_length(columns_to_stack)
+    set_length!(new_column_set, total_len)
+
+    # Since the column_sets are already sorted by key, the minimum first key in a columnset
+    # We go down each columnset and check if it has a matching key.
+    # From there, we either pop! the column if the key matches or create a default column and add
+    # it to the stack
+    vcat = NestedVcat(csm)
+    while !all(length(cs)==0 for cs in columns_to_stack)
+        first_key = minimum(get_first_key, columns_to_stack)
+        matching_cols = (pop!(cs, first_key, default_col) for cs in columns_to_stack)
+        push!(new_column_set, first_key=>foldl(vcat, matching_cols))
     end
-    deleteat!(column_stack, length(column_stack)-get_data(step)+1:length(column_stack))
-    push!(column_stack, column_set)
+
+    # free the column_sets that are no longer needed
+    for _ in 1:column_set_num
+        cs = pop!(column_stack)
+        free_column_set!(csm, cs)
+    end
+
+    push!(column_stack, new_column_set)
     return nothing
 end
 

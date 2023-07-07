@@ -1,3 +1,7 @@
+is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
+is_container(t) = typeof(StructTypes.StructType(t)) <: Container
+is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
+
 """Check if the eltype of a T are all value types (i.e. not containers)"""
 all_eltypes_are_values(::Type{T}) where T = all_is_value_type(eltype(T))
 function all_is_value_type(::Type{T}) where T
@@ -33,3 +37,19 @@ end
 """Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
 
+function safe_peel(itr)
+    try
+        return Iterators.peel(itr)
+    catch e
+        if e isa BoundsError
+            return nothing
+        end
+        throw(e)
+    end
+end
+
+"""Collect an iterator into a tuple"""
+collect_tuple(itr) = _collect_tuple(safe_peel(itr))
+_collect_tuple(peel_return) = _collect_tuple(peel_return...)
+_collect_tuple(::Nothing) = ()
+_collect_tuple(val, rest::Iterators.Rest) = (val, collect_tuple(rest)...)
