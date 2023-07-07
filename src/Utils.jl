@@ -36,3 +36,9 @@ end
 
 """Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
+
+"""Collect an iterator into a tuple"""
+collect_tuple(itr) = _collect_tuple(Iterators.peel(itr))
+_collect_tuple(peel_return) = _collect_tuple(peel_return...)
+_collect_tuple(::Nothing) = ()
+_collect_tuple(val, rest::Iterators.Rest) = (val, collect_tuple(rest)...)

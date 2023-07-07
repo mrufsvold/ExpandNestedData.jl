@@ -4,6 +4,7 @@ using ..NameLists: NameID, NameList, top_level_id, unnamed_id, unnamed, max_id
 using ..NestedIterators
 import ..get_name
 import ..get_id
+import ..collect_tuple
 export NameID, NameList, top_level_id, unnamed, unnamed_id
 export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length, set_length!
 export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
@@ -162,7 +163,7 @@ Get an id for the linked list of ids that constitute a field path in the core lo
 """
 function get_id(csm::ColumnSetManager, name_list::NameList)
     field_path = collect_name_ids(csm::ColumnSetManager, name_list::NameList)
-    path_tuple = tuple((i for i in field_path)...)
+    path_tuple = collect_tuple(field_path)
     return get_id(csm, path_tuple)
 end
 
