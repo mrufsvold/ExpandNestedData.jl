@@ -8,6 +8,7 @@ import ..get_id
 export RawNestedIterator, NestedIterator, seed, repeat_each, cycle, NestedVcat
 
 struct CaptureListNil end
+"""A node in a linked list of captured iteration instructions"""
 struct CaptureList{T}
     head::T
     tail::Union{CaptureListNil,CaptureList{T}}
@@ -18,6 +19,7 @@ Base.iterate(cl::CaptureList) = (cl.head, cl.tail)
 Base.iterate(::CaptureList, state::CaptureList) = iterate(state)
 Base.iterate(::CaptureList, ::CaptureListNil) = nothing
 
+# IterCapture enumerates the kinds of instructions that can be captured and holds the values of those captures
 @sum_type IterCapture :hidden begin
     RawSeed(::NameID)
     RawRepeat(::Int64)
@@ -40,7 +42,7 @@ Construct a new RawNestedIterator seeded with the value data
 # Args
 csm::ColumnSetManager
 data::Any: seed value
-total_length::Int: Cycle the values to reach total_length (must be even divisible by the length of `data`)
+# Kwargs
 default_value: Value to fill if data is empty
 """
 function RawNestedIterator(csm, data::T; default_value=missing) where T
@@ -55,7 +57,6 @@ function RawNestedIterator(csm, data::T; default_value=missing) where T
     id = get_id(csm, value)
     return RawNestedIterator(id, val_T, is_one, len)
 end
-
 function RawNestedIterator(value_id::NameID, ::Type{T}, is_one::Bool, len::Int64) where T
     E = eltype(T)
     f = CaptureList(IterCapture'.RawCycle(len), CaptureList(IterCapture'.RawSeed(value_id)))
@@ -82,10 +83,9 @@ function Base.isequal(rni1::RawNestedIterator, rni2::RawNestedIterator, csm)
     return isequal(collect(rni1, csm), collect(rni2, csm))
 end
 
-abstract type InstructionCapture <: Function end
 
 """Seed is the core starter for a NestedIterator"""
-struct Seed{T} <: InstructionCapture
+struct Seed{T}
     data::T
 end
 (s::Seed)(i) = s.data[i]
@@ -95,7 +95,7 @@ end
 Seed(csm, raw_seed::RawSeed) = get_name(csm, raw_seed.data_id)
 
 """Captures the repeat value for a repeat_each call"""
-struct UnrepeatEach <: InstructionCapture
+struct UnrepeatEach 
     n::Int64
 end
 (u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
@@ -111,7 +111,7 @@ function repeat_each(c::RawNestedIterator, n)
 end
 
 """Captures the repeat value for a cycle call"""
-struct Uncycle <: InstructionCapture
+struct Uncycle
     n::Int64
 end
 (u::Uncycle)(i) = mod((i-1),u.n) + 1
@@ -167,19 +167,23 @@ function _vcat(csm, c1::RawNestedIterator, c2::RawNestedIterator)
         len, type, false, no_name_id
     )
 end
+"""Get a value stored in the ColumnSetManager and assert the return type of the value"""
 get_single_value(csm, id, ::Type{T}) where T = first(get_name(csm, id))::T
 
+"""Callable struct that stores a ColumnSetManager to allow a two arg function for vcat-ing RawNestedIterators with folds"""
 struct NestedVcat{T} <: Function
     csm::T
 end
 (v::NestedVcat)(c1,c2) = _vcat(v.csm, c1, c2)
 (v::NestedVcat)(c1) = c1
 
+"""Compose a get_index function out of the list of captured instructions from a RawNestedIterator"""
 function build_get_index(csm, captures)
     iter_funcs = Iterators.map(cap -> get_iter_func(csm, cap), captures)
     return foldl((f,g) -> g ∘ f, iter_funcs)
 end
 
+"""Construct the correct iterator capture function for the given IterCapture"""
 function get_iter_func(csm, capture::IterCapture)
     @cases capture begin
         RawSeed(id) => Seed(get_name(csm, id))

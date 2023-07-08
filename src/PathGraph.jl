@@ -16,23 +16,29 @@ import ..get_name
 
 export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes, get_default, make_path_graph, get_final_name
 
+# Nodes are keys in the graph of the data source. 
 @sum_type Node :hidden begin
     Path(::NameID, ::Vector{Node})
     Value(::NameID, ::NameID, ::NameID, ::Bool, ::Ref{RawNestedIterator})
     Simple(::NameID)
 end
 
+"""A PathNode represents a Node which has children"""
 PathNode(csm::ColumnSetManager, name, children::Vector{Node}) = PathNode(get_id(csm, name), children)
 PathNode(name::NameID, children::Vector{Node}) = Node'.Path(name, children)
 
+"""A Value node represents a Node that points to a leaf value in the data source."""
 function ValueNode(csm::ColumnSetManager, name, final_name, field_path, pool_arrays::Bool, default::RawNestedIterator)
     ValueNode(get_id(csm, name),  get_id(csm, final_name),  get_id_for_path(csm, field_path), pool_arrays, default)
 end
 ValueNode(name::NameID, final_name::NameID, field_path::NameID, pool_arrays::Bool, default::RawNestedIterator) = Node'.Value(name, final_name, field_path, pool_arrays, Ref{RawNestedIterator}(default))
 
+"""Simple node is a placeholder type for creating symmetry in the algorithm when not using ColumnDefinitions"""
 SimpleNode(csm::ColumnSetManager, name) = SimpleNode(get_id(csm, name))
 SimpleNode(name::NameID) = Node'.Simple(name)
 
+##### Node accessor functions #####
+###################################
 function get_name(node::Node)
     return @cases node begin 
         Path(n,_) => n
@@ -94,17 +100,17 @@ function get_all_value_nodes(node::Node, ch)
 end
 
 
-function make_path_nodes!(csm, column_defs::AbstractArray{ColumnDefinition}, level = 1)
+function make_path_nodes(csm, column_defs::AbstractArray{ColumnDefinition}, level = 1)
     unique_names = get_unique_current_names(column_defs, level)
     nodes = Vector{Node}(undef, length(unique_names))
     for (i, unique_name) in enumerate(unique_names)
-        nodes[i] = extract_path_node!(csm, column_defs, unique_name, level)
+        nodes[i] = extract_path_node(csm, column_defs, unique_name, level)
     end
     return nodes
 end
 
 """Analyze the column_defs that match the unique name at this level and create a node"""
-function extract_path_node!(csm, column_defs, unique_name, level)
+function extract_path_node(csm, column_defs, unique_name, level)
     matching_defs = filter(p -> current_path_name(p, level) == unique_name, column_defs)
     are_value_nodes = [!has_more_keys(def, level) for def in matching_defs]
     
@@ -122,7 +128,7 @@ function extract_path_node!(csm, column_defs, unique_name, level)
     with_children = view(matching_defs, .!are_value_nodes)
     children_column_defs = make_column_def_child_copies(with_children, unique_name, level)
 
-    child_nodes = make_path_nodes!(csm, children_column_defs, level+1)
+    child_nodes = make_path_nodes(csm, children_column_defs, level+1)
     if mix_of_node_types
         without_child_idx = findfirst(identity, are_value_nodes)
         without_child = matching_defs[without_child_idx]
@@ -141,6 +147,6 @@ function extract_path_node!(csm, column_defs, unique_name, level)
 end
 
 """Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(csm, column_defs) = PathNode(top_level_id, make_path_nodes!(csm, column_defs))
+make_path_graph(csm, column_defs) = PathNode(top_level_id, make_path_nodes(csm, column_defs))
 make_path_graph(_, ::Nothing) = SimpleNode(unnamed_id)
 end

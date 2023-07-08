@@ -27,6 +27,8 @@ missing_column_set_step(csm, path_node) = NewColumnSetStep(make_missing_column_s
 init_column_set_step(csm, name_list, data) = NewColumnSetStep(init_column_set(csm, name_list, data))
 empty_column_set_step(csm) = NewColumnSetStep(get_column_set(csm))
 
+##### UnpackStep accessor Functions ###############
+###################################################
 function PathGraph.get_name(u::UnpackStep)
     return @cases u begin
         [DictStep,ArrayStep,LeafStep,DefaultStep](n) => n
@@ -85,16 +87,20 @@ function wrap_object(name::NameList, data::T, path_node::Node, step_type::S=noth
     return _step_type(name, data, path_node)
 end
 
+"""Create a New Default Col Step when not using ColumnDefinitions"""
 function empty_arr_simple!(name, instruction_stack)
     next_step = UnpackStep'.DefaultStep(name)
     push!(instruction_stack, next_step)
 end
 
+"""Create a New Default Col Step when using ColumnDefinitions"""
 function empty_arr_path!(csm, path_node, instruction_stack)
     next_step = missing_column_set_step(csm, path_node)
     push!(instruction_stack, next_step)
 end
 
+"""Decide if we have all containers (true/false) and no containers (true/false) in an array given the
+qualifications of ColumnDefinition"""
 function calculate_container_status_for_path_node(child_nodes, container_count)
     # for path nodes, we need to check if there is :unnamed (indicating that there should be loose values)
     # if so, override all_containers so we check for loose
@@ -105,6 +111,7 @@ function calculate_container_status_for_path_node(child_nodes, container_count)
     (false, container_count == 0)
 end
 
+"""Used in the context where we have a PathNode so it must be container, returnes a UnpackStep"""
 function wrap_container_val(data_has_name::Bool, name_list::NameList, data, node::Node, csm::ColumnSetManager)
     @debug "wrap_container val for" data=data 
     if data_has_name

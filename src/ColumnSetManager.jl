@@ -167,6 +167,8 @@ function get_id(csm::ColumnSetManager, name_list::NameList)
     return get_id(csm, path_tuple)
 end
 
+"""Return a vector of NameIDs based on the given NameList. CAREFUL the returned vector is a buffer which is overwritten the
+next time `collect_name_ids` is called."""
 function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
     empty!(csm.name_list_collector)
     head::NameList = name_list
@@ -328,8 +330,5 @@ end
 Return the lowest value id key from a columnset
 """
 get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : max_id
-
-
-
 
 end # ColumnSetManagers
