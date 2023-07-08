@@ -69,7 +69,6 @@ end
 
 
 @testset "ExpandNestedData" begin
-
     @testset "Internals" begin
         @testset "NestedIterators and ColumnSets" begin
             csm = ExpandNestedData.ColumnSetManager()

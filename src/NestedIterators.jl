@@ -7,23 +7,34 @@ import ..get_name
 import ..get_id
 export RawNestedIterator, NestedIterator, seed, repeat_each, cycle, NestedVcat
 
+struct CaptureListNil end
+struct CaptureList{T}
+    head::T
+    tail::Union{CaptureListNil,CaptureList{T}}
+end
+CaptureList(seed) = CaptureList(seed, CaptureListNil())
+
+Base.iterate(cl::CaptureList) = (cl.head, cl.tail)
+Base.iterate(::CaptureList, state::CaptureList) = iterate(state)
+Base.iterate(::CaptureList, ::CaptureListNil) = nothing
+
 @sum_type IterCapture :hidden begin
     RawSeed(::NameID)
     RawRepeat(::Int64)
     RawCycle(::Int64)
-    RawVcat(::Int64, ::Vector{IterCapture}, ::Vector{IterCapture})
+    RawVcat(::Int64, ::CaptureList{IterCapture}, ::CaptureList{IterCapture})
 end
 
+
 mutable struct RawNestedIterator
-    # todo use linked list 
-    get_index::Vector{IterCapture}
+    get_index::Union{CaptureListNil,CaptureList}
     column_length::Int64
     el_type::Type
     one_value::Bool
     unique_val::NameID
 end
 """
-RawNestedIterator(csm, data; total_length=nothing, default_value=missing)
+RawNestedIterator(csm, data; default_value=missing)
 
 Construct a new RawNestedIterator seeded with the value data
 # Args
@@ -32,7 +43,7 @@ data::Any: seed value
 total_length::Int: Cycle the values to reach total_length (must be even divisible by the length of `data`)
 default_value: Value to fill if data is empty
 """
-function RawNestedIterator(csm, data::T; total_length::Int=0, default_value=missing) where T
+function RawNestedIterator(csm, data::T; default_value=missing) where T
     value = if T <: AbstractArray
         length(data) == 0 ? (default_value,) : data
     else
@@ -42,17 +53,16 @@ function RawNestedIterator(csm, data::T; total_length::Int=0, default_value=miss
     len = length(value)
     val_T = typeof(value)
     id = get_id(csm, value)
-    ncycle = total_length == 0 ? 1 : total_length ÷ len
-    return RawNestedIterator(id, val_T, is_one, len, ncycle)
+    return RawNestedIterator(id, val_T, is_one, len)
 end
 
-function RawNestedIterator(value_id::NameID, ::Type{T}, is_one::Bool, len::Int64, ncycle::Int64) where T
+function RawNestedIterator(value_id::NameID, ::Type{T}, is_one::Bool, len::Int64) where T
     E = eltype(T)
-    f = IterCapture[IterCapture'.RawSeed(value_id), IterCapture'.RawCycle(len)]
+    f = CaptureList(IterCapture'.RawCycle(len), CaptureList(IterCapture'.RawSeed(value_id)))
     unique_val = is_one ? value_id : no_name_id
-    return RawNestedIterator(f, len*ncycle, E, is_one, unique_val)
+    return RawNestedIterator(f, len, E, is_one, unique_val)
 end
-RawNestedIterator() = RawNestedIterator(IterCapture[], 0, Union{}, false, no_name_id)
+RawNestedIterator() = RawNestedIterator(CaptureListNil(), 0, Union{}, false, no_name_id)
 
 Base.length(rni::RawNestedIterator) = rni.column_length
 Base.size(rni::RawNestedIterator) = (rni.column_length,)
@@ -96,7 +106,7 @@ function repeat_each(c::RawNestedIterator, n)
     if c.one_value
         return c
     end
-    push!(c.get_index,IterCapture'.RawRepeat(n))
+    c.get_index = CaptureList(IterCapture'.RawRepeat(n), c.get_index)
     return c
 end
 
@@ -113,7 +123,7 @@ function cycle(c::RawNestedIterator, n)
     if c.one_value
         return c
     end
-    push!(c.get_index,IterCapture'.RawCycle(original_len))
+    c.get_index = CaptureList(IterCapture'.RawCycle(original_len), c.get_index)
     return c
 end
 
@@ -153,7 +163,7 @@ function _vcat(csm, c1::RawNestedIterator, c2::RawNestedIterator)
     end
     
     return RawNestedIterator(
-        IterCapture[IterCapture'.RawVcat(c1_len, c1.get_index, c2.get_index)], 
+        CaptureList(IterCapture'.RawVcat(c1_len, c1.get_index, c2.get_index)),
         len, type, false, no_name_id
     )
 end
@@ -167,7 +177,7 @@ end
 
 function build_get_index(csm, captures)
     iter_funcs = Iterators.map(cap -> get_iter_func(csm, cap), captures)
-    return foldr(∘, iter_funcs)
+    return foldl((f,g) -> g ∘ f, iter_funcs)
 end
 
 function get_iter_func(csm, capture::IterCapture)

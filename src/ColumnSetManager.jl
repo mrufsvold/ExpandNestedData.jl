@@ -175,7 +175,7 @@ function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
         head = head.tail_i
     end
     # need to reverse field path because we stack the last on top as we descend through the data structure
-    return Iterators.reverse(csm.name_list_collector)
+    return reverse!(csm.name_list_collector)
 end
 
 
@@ -292,7 +292,7 @@ function apply_in_place!(cols, f, args...)
     for i in eachindex(cols)
         k, v = cols[i]
         val = f(v, args...)
-        cols[i] = Pair(k,val)
+        cols[i] = Pair{NameID, RawNestedIterator}(k,val)
     end
 end
 
