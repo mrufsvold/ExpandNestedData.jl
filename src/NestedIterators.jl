@@ -5,7 +5,6 @@ using Compat
 using ..NameLists: NameID, no_name_id
 import ..get_name
 import ..get_id
-export RawNestedIterator, NestedIterator, seed, repeat_each, cycle, NestedVcat
 
 struct CaptureListNil end
 """A node in a linked list of captured iteration instructions"""
@@ -128,7 +127,7 @@ function cycle(c::RawNestedIterator, n)
 end
 
 """Captures the two getindex functions of vcated NestedIterators. f_len tells which index to break over to g."""
-struct Unvcat{F, G} <: InstructionCapture
+struct Unvcat{F, G} 
     f_len::Int64
     f::F
     g::G 

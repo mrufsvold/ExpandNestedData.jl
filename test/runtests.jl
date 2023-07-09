@@ -2,6 +2,11 @@ using PooledArrays
 using Test
 using JSON3
 using ExpandNestedData
+import ExpandNestedData: NestedIterators, 
+                        ColumnSetManagers, 
+                        NameLists, 
+                        PathGraph,
+                        ColumnDefinitions
 using TypedTables
 using DataStructures: OrderedRobinDict
 
@@ -72,51 +77,51 @@ end
     @testset "Internals" begin
         @testset "NestedIterators and ColumnSets" begin
             csm = ExpandNestedData.ColumnSetManager()
-            iter1_2() = ExpandNestedData.RawNestedIterator(csm, [1,2])
+            iter1_2() = NestedIterators.RawNestedIterator(csm, [1,2])
             @test [1,2] == collect(iter1_2(), csm)
-            @test [1,2,1,2] == collect(ExpandNestedData.cycle(iter1_2(), 2), csm)
-            @test [1,1,2,2] == collect(ExpandNestedData.repeat_each(iter1_2(), 2), csm)
-            ex_vcat = ExpandNestedData.NestedIterators.NestedVcat(csm)
+            @test [1,2,1,2] == collect(NestedIterators.cycle(iter1_2(), 2), csm)
+            @test [1,1,2,2] == collect(NestedIterators.repeat_each(iter1_2(), 2), csm)
+            ex_vcat = NestedIterators.NestedVcat(csm)
             @test [1,2,1,2] == collect(ex_vcat(iter1_2(), iter1_2()), csm)
             col_set = ExpandNestedData.ColumnSet(
-                ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
-                ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2]),
+                NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
+                NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2]),
             )
-            @test collect(keys(col_set)) == [ExpandNestedData.NameID(1),ExpandNestedData.NameID(2)]
+            @test collect(keys(col_set)) == [NameLists.NameID(1),NameLists.NameID(2)]
             col_set2 = ExpandNestedData.ColumnSet(
-                ExpandNestedData.NameID(1) => ExpandNestedData.RawNestedIterator(csm, [1,2,1,2]),
-                ExpandNestedData.NameID(2) => ExpandNestedData.RawNestedIterator(csm, [3,4,5,6]),
+                NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2,1,2]),
+                NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
             )
-            @test isequal(ExpandNestedData.cycle_columns_to_length!(col_set), col_set2, csm)
+            @test isequal(ColumnSetManagers.cycle_columns_to_length!(col_set), col_set2, csm)
 
             # popping columns
-            @test ExpandNestedData.get_first_key(col_set) == ExpandNestedData.NameID(1)
-            default_col = pop!(col_set, ExpandNestedData.NameID(3), ExpandNestedData.RawNestedIterator(csm, [1]))
-            @test isequal(default_col, ExpandNestedData.RawNestedIterator(csm, [1,1,1,1]), csm)
-            popped_col = pop!(col_set, ExpandNestedData.NameID(2), ExpandNestedData.RawNestedIterator(csm, [1]))
+            @test ColumnSetManagers.get_first_key(col_set) == NameLists.NameID(1)
+            default_col = pop!(col_set, NameLists.NameID(3), NestedIterators.RawNestedIterator(csm, [1]))
+            @test isequal(default_col, NestedIterators.RawNestedIterator(csm, [1,1,1,1]), csm)
+            popped_col = pop!(col_set, NameLists.NameID(2), NestedIterators.RawNestedIterator(csm, [1]))
             @test collect(popped_col, csm) == [3,4,5,6]
-            @test collect(keys(col_set)) == [ExpandNestedData.NameID(1)]
+            @test collect(keys(col_set)) == [NameLists.NameID(1)]
 
             # column length 
-            @test ExpandNestedData.get_total_length([col_set, col_set2]) == 8
-            @test ExpandNestedData.column_length(ExpandNestedData.repeat_each_column!(col_set, 2)) == 8
+            @test ColumnSetManagers.get_total_length([col_set, col_set2]) == 8
+            @test ColumnSetManagers.column_length(ColumnSetManagers.repeat_each_column!(col_set, 2)) == 8
 
             # column set manager
             csm = ExpandNestedData.ColumnSetManager()
-            cs = ExpandNestedData.get_column_set(csm)
-            @test isequal(cs, ExpandNestedData.ColumnSet(), csm)
-            ExpandNestedData.free_column_set!(csm, cs)
+            cs = ColumnSetManagers.get_column_set(csm)
+            @test isequal(cs, ColumnSetManagers.ColumnSet(), csm)
+            ColumnSetManagers.free_column_set!(csm, cs)
             @test !isempty(csm.column_sets)
-            cs = ExpandNestedData.get_column_set(csm)
+            cs = ColumnSetManagers.get_column_set(csm)
             @test isempty(csm.column_sets)
 
-            cs[ExpandNestedData.NameID(3)] = ExpandNestedData.RawNestedIterator()
-            cs[ExpandNestedData.NameID(1)] = ExpandNestedData.RawNestedIterator()
-            @test collect(keys(cs)) == [ExpandNestedData.NameID(1),ExpandNestedData.NameID(3)]
+            cs[NameLists.NameID(3)] = NestedIterators.RawNestedIterator()
+            cs[NameLists.NameID(1)] = NestedIterators.RawNestedIterator()
+            @test collect(keys(cs)) == [NameLists.NameID(1),NameLists.NameID(3)]
 
             name = :test_name
             id = ExpandNestedData.get_id(csm, name)
-            @test id == ExpandNestedData.NameID(2)
+            @test id == NameLists.NameID(2)
             @test id == ExpandNestedData.get_id(csm, name)
             @test name == ExpandNestedData.get_name(csm, id)
             field_path = (name,)
@@ -125,41 +130,41 @@ end
             @test id_for_path == ExpandNestedData.get_id_for_path(csm, field_path)
 
             # NameLists 
-            top = ExpandNestedData.NameList()
-            l = ExpandNestedData.NameList(top, id)
+            top = NameLists.NameList()
+            l = NameLists.NameList(top, id)
             id_for_tuple_from_list = ExpandNestedData.get_id(csm, l)
             @test id_for_tuple_from_list == id_for_path
             @test ExpandNestedData.ColumnSetManagers.reconstruct_field_path(csm, id_for_tuple_from_list) == field_path
 
             # Rebuild ColumnSet
-            raw_cs = ExpandNestedData.ColumnSet(id_for_path => ExpandNestedData.RawNestedIterator(csm, [1]))
-            finalized_col = ExpandNestedData.NestedIterator(csm, ExpandNestedData.RawNestedIterator(csm, [1]))
-            @test OrderedRobinDict((name,) => finalized_col) == ExpandNestedData.build_final_column_set(csm, raw_cs)
+            raw_cs = ExpandNestedData.ColumnSet(id_for_path => NestedIterators.RawNestedIterator(csm, [1]))
+            finalized_col = NestedIterators.NestedIterator(csm, NestedIterators.RawNestedIterator(csm, [1]))
+            @test OrderedRobinDict((name,) => finalized_col) == ColumnSetManagers.build_final_column_set(csm, raw_cs)
         end
 
         @testset "ColumnDefinitions and PathGraph" begin
             @test fieldsequal(ColumnDefinition((:a,)), ColumnDefinition([:a]))
             coldef = ColumnDefinition((:a,:b), Dict(); pool_arrays=false, name_join_pattern = "^")
             @test coldef == ColumnDefinition((:a,:b), Symbol("a^b"), missing, false)
-            @test ExpandNestedData.current_path_name(coldef, 2) == :b
-            @test collect(ExpandNestedData.make_column_def_child_copies([coldef], :a, 1)) == [coldef]
+            @test ColumnDefinitions.current_path_name(coldef, 2) == :b
+            @test collect(ColumnDefinitions.make_column_def_child_copies([coldef], :a, 1)) == [coldef]
 
             csm = ExpandNestedData.ColumnSetManager()
-            simple = ExpandNestedData.SimpleNode(csm, :a)
-            value = ExpandNestedData.ValueNode(csm, :a, :a, (:a,), false, ExpandNestedData.RawNestedIterator(csm, [1]))
-            path_n = ExpandNestedData.PathNode(csm, :a, ExpandNestedData.Node[value])
+            simple = PathGraph.SimpleNode(csm, :a)
+            value = PathGraph.ValueNode(csm, :a, :a, (:a,), false, NestedIterators.RawNestedIterator(csm, [1]))
+            path_n = PathGraph.PathNode(csm, :a, PathGraph.Node[value])
             @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
             for (f,result) in ((
-                    ExpandNestedData.PathGraph.get_final_name, ExpandNestedData.NameID(2)), 
-                    (ExpandNestedData.PathGraph.get_field_path,ExpandNestedData.NameID(4)), 
-                    (ExpandNestedData.PathGraph.get_pool_arrays,false))
+                    PathGraph.get_final_name, NameLists.NameID(2)), 
+                    (PathGraph.get_field_path,NameLists.NameID(4)), 
+                    (PathGraph.get_pool_arrays,false))
                 @test_throws ErrorException f(simple)
                 @test_throws ErrorException f(path_n)
                 @test f(value) == result
             end
 
-            @test ExpandNestedData.get_all_value_nodes(path_n) == [value]
-            @test isequal(ExpandNestedData.get_default(value), ExpandNestedData.RawNestedIterator(csm, [1]),csm)
+            @test PathGraph.get_all_value_nodes(path_n) == [value]
+            @test isequal(PathGraph.get_default(value), NestedIterators.RawNestedIterator(csm, [1]),csm)
         end
 
         @testset "Utils" begin
@@ -181,8 +186,8 @@ end
 
         @testset "Core" begin
             csm = ExpandNestedData.ColumnSetManager()
-            name_list = ExpandNestedData.NameList()
-            node = ExpandNestedData.SimpleNode(ExpandNestedData.NameID(0))
+            name_list = NameLists.NameList()
+            node = PathGraph.SimpleNode(NameLists.NameID(0))
             col_num = 5
             dict_step = ExpandNestedData.DictStep(name_list, Dict(), node)
             array_step = ExpandNestedData.ArrayStep(name_list, [], node)
@@ -239,14 +244,14 @@ end
             
             @test begin 
                 column_defs = [
-                        ExpandNestedData.ColumnDefinition((:data,)),
-                        ExpandNestedData.ColumnDefinition((:data, :E))
+                        ColumnDefinitions.ColumnDefinition((:data,)),
+                        ColumnDefinitions.ColumnDefinition((:data, :E))
                     ]
-                path_graph = ExpandNestedData.PathGraph.make_path_graph(csm, column_defs)
+                path_graph = PathGraph.make_path_graph(csm, column_defs)
                 actual_col_set = ExpandNestedData.make_missing_column_set(csm, path_graph)
                 expected_col_set = ExpandNestedData.ColumnSet(
-                    ExpandNestedData.get_id_for_path(csm, (:data, ExpandNestedData.unnamed)) => ExpandNestedData.RawNestedIterator(csm, [missing]),
-                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => ExpandNestedData.RawNestedIterator(csm, [missing])
+                    ExpandNestedData.get_id_for_path(csm, (:data, NameLists.unnamed)) => NestedIterators.RawNestedIterator(csm, [missing]),
+                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => NestedIterators.RawNestedIterator(csm, [missing])
                 )
                 isequal(actual_col_set, expected_col_set,csm)
             end
@@ -355,10 +360,10 @@ end
 
     @testset "Configured Expand" begin
         columns_defs = [
-            ExpandNestedData.ColumnDefinition((:d,)),
-            ExpandNestedData.ColumnDefinition((:a, :b)),
-            ExpandNestedData.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
-            ExpandNestedData.ColumnDefinition((:e, :f); default_value="Missing branch")
+            ColumnDefinitions.ColumnDefinition((:d,)),
+            ColumnDefinitions.ColumnDefinition((:a, :b)),
+            ColumnDefinitions.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+            ColumnDefinitions.ColumnDefinition((:e, :f); default_value="Missing branch")
             ]
         expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing], 
             :e_f => repeat(["Missing branch"], 5))
@@ -369,8 +374,8 @@ end
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
         columns_defs = [
-            ExpandNestedData.ColumnDefinition((:data,)),
-            ExpandNestedData.ColumnDefinition((:data, :E))
+            ColumnDefinitions.ColumnDefinition((:data,)),
+            ColumnDefinitions.ColumnDefinition((:data, :E))
         ]
         @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
 

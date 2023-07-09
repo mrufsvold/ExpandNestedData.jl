@@ -1,7 +1,8 @@
 using .PathGraph
 using .PathGraph: Node, get_all_value_nodes, get_field_path, get_default
-using .ColumnSetManagers
-using .ColumnSetManagers: ColumnSetManager, get_column_set, get_id_for_path, get_name
+using .ColumnSetManagers: ColumnSetManager, ColumnSet, get_column_set, 
+                    get_id_for_path, get_name, init_column_set
+import .NameLists: NameList, unnamed_id
 
 @sum_type UnpackStep :hidden begin
     DictStep(::NameList, ::Any, ::Node)

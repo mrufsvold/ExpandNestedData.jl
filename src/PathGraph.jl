@@ -14,8 +14,6 @@ using ..ColumnDefinitions:  ColumnDefinition,
                             make_column_def_child_copies
 import ..get_name
 
-export Node, SimpleNode, ValueNode, PathNode, get_name, get_children, get_all_value_nodes, get_default, make_path_graph, get_final_name
-
 # Nodes are keys in the graph of the data source. 
 @sum_type Node :hidden begin
     Path(::NameID, ::Vector{Node})

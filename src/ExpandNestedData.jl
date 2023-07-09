@@ -8,8 +8,7 @@ using StructTypes
 using SumTypes
 using TypedTables: Table
 
-export expand
-export ColumnDefinition
+export expand, ColumnDefinition
 
 """NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
 contents without worrying about `getkey` or `getproperty`, etc.
@@ -26,13 +25,12 @@ include("NameLists.jl")
 include("NestedIterators.jl")
 include("ColumnSetManager.jl")
 include("ColumnDefinitions.jl")
+import .ColumnDefinitions: ColumnDefinition
 include("PathGraph.jl")
-using .NestedIterators
-using .ColumnSetManagers
-using .ColumnDefinitions
-using .PathGraph
 include("ExpandedTable.jl")
-include("Core.jl")
 include("CoreHelpers.jl")
+
+# Here is where the main logic starts
+include("Core.jl")
 
 end
