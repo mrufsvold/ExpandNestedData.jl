@@ -1,15 +1,11 @@
 module ColumnSetManagers
 using DataStructures: OrderedRobinDict, Stack
 using ..NameLists: NameID, NameList, top_level_id, unnamed_id, unnamed, max_id
-using ..NestedIterators
+import ..NestedIterators: RawNestedIterator, NestedIterator, cycle, repeat_each
+
 import ..get_name
 import ..get_id
 import ..collect_tuple
-export NameID, NameList, top_level_id, unnamed, unnamed_id
-export ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, get_total_length, column_length, set_length!
-export ColumnSetManager, get_id, get_name, get_id_for_path, get_column_set, free_column_set!, build_final_column_set, init_column_set, reconstruct_field_path
-
-
 
 #### ColumnSet ####
 ###################
@@ -167,6 +163,8 @@ function get_id(csm::ColumnSetManager, name_list::NameList)
     return get_id(csm, path_tuple)
 end
 
+"""Return a vector of NameIDs based on the given NameList. CAREFUL the returned vector is a buffer which is overwritten the
+next time `collect_name_ids` is called."""
 function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
     empty!(csm.name_list_collector)
     head::NameList = name_list
@@ -175,7 +173,7 @@ function collect_name_ids(csm::ColumnSetManager, name_list::NameList)
         head = head.tail_i
     end
     # need to reverse field path because we stack the last on top as we descend through the data structure
-    return Iterators.reverse(csm.name_list_collector)
+    return reverse!(csm.name_list_collector)
 end
 
 
@@ -292,7 +290,7 @@ function apply_in_place!(cols, f, args...)
     for i in eachindex(cols)
         k, v = cols[i]
         val = f(v, args...)
-        cols[i] = Pair(k,val)
+        cols[i] = Pair{NameID, RawNestedIterator}(k,val)
     end
 end
 
@@ -328,8 +326,5 @@ end
 Return the lowest value id key from a columnset
 """
 get_first_key(cs::ColumnSet) = length(cs) > 0 ? first(first(cs.cols)) : max_id
-
-
-
 
 end # ColumnSetManagers

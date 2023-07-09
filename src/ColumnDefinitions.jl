@@ -1,8 +1,6 @@
 module ColumnDefinitions
 using ..ColumnSetManagers: ColumnSet, unnamed
 import ..join_names
-export ColumnDefinition, get_field_path, get_column_name, get_default_value, get_pool_arrays, make_column_def_child_copies, current_path_name, construct_column_definitions
-
 
 """ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
 struct ColumnDefinition

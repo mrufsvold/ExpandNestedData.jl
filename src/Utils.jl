@@ -1,3 +1,4 @@
+# helper functions for inspecting types for container traits
 is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
@@ -37,19 +38,23 @@ end
 """Link a list of keys into an underscore separted column name"""
 join_names(names, joiner="_") = names .|> string |> (s -> join(s, joiner)) |> Symbol
 
-function safe_peel(itr)
-    try
-        return Iterators.peel(itr)
-    catch e
-        if e isa BoundsError
-            return nothing
-        end
-        throw(e)
-    end
-end
 
 """Collect an iterator into a tuple"""
 collect_tuple(itr) = _collect_tuple(safe_peel(itr))
 _collect_tuple(peel_return) = _collect_tuple(peel_return...)
 _collect_tuple(::Nothing) = ()
-_collect_tuple(val, rest::Iterators.Rest) = (val, collect_tuple(rest)...)
+_collect_tuple(val, rest) = (val, collect_tuple(rest)...)
+
+"""safe_peel(itr)
+Acts like Base.Iterators.peel, but 1) returns views instead of an Iterator.Rest and
+works across all Julia 1.X versions for empty containers
+"""
+function safe_peel(itr)
+    len = length(itr)
+    if len == 0
+        return nothing
+    elseif len == 1
+        return (Iterators.only(itr), ())
+    end
+    return (first(itr), @view itr[2:end])
+end

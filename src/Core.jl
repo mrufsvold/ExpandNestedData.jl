@@ -1,3 +1,10 @@
+import .NestedIterators: RawNestedIterator, NestedVcat
+import .ColumnSetManagers: ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, 
+                get_total_length, column_length, set_length!, free_column_set!, build_final_column_set
+import .PathGraph: make_path_graph, get_children, SimpleNode
+import .ColumnDefinitions: construct_column_definitions
+
+
 """
     expand(data, column_defs=nothing; 
             default_value = missing, 

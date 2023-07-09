@@ -1,3 +1,8 @@
+import .NestedIterators: NestedIterator
+import .NameLists: top_level_id
+import .PathGraph: Node, get_final_name, get_all_value_nodes, get_field_path
+import .ColumnSetManagers: reconstruct_field_path
+
 @enum ColumnStyle flat_columns nested_columns
 
 get_column_style(s::Symbol) = (flat=flat_columns, nested=nested_columns)[s]
