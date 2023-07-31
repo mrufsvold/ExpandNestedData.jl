@@ -2,23 +2,20 @@
 ExpandNestedData.jl is a small package that can consume nested data structures like dictionaries of
 dictionaries or structs of structs and produce a normalized, Tables.jl-compliant NamedTuple.
 It can be used with JSON3.jl, XMLDict.jl, and other packages that parse file formats which are
-structured as denormalized data.
-
-```@contents
-Depth = 4
-```
+structured as denormalized data. It operates similarly to [`Pandas.json_normalize`](https://pandas.pydata.org/docs/reference/api/pandas.json_normalize.html),
+but it is much more flexible.
 
 ## Getting Started
 ### Install
-```@repl
+```julia
 using Pkg
 Pkg.add("ExpandNestedData")
 ```
 ### Basic Usage
 ExpandNestedData provides a single function `expand` to flatten out nested data. 
 
-```@example
-using ExpandNestedData #hide
+```@example 1
+using ExpandNestedData # hide
 using JSON3
 using DataFrames
 
@@ -52,27 +49,17 @@ per-column configurations.
 | `column_style::Symbol` | Choose returned column style from `:nested` or `:flat`. If nested, `column_names` are ignored and a TypedTables.Table is returned in which the columns are nested in the same structure as the source data. Default: `:flat` |
 | `name_join_pattern::String` | A pattern to put between the keys when joining the path into a column name. Default: `"_"`. |
 
-```@example
-using ExpandNestedData #hide
-using JSON3 #hide
-using DataFrames #hide
-
-message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4], :c => 1), Dict(:b => []) ], :d => 4) #hide
-
+```@example 1
 name_map = Dict([:a, :b] => :Column_B)
 expand(message; default_value="no value", pool_arrays=true, column_names=name_map) |> DataFrame
 ```
-### Using ColumnDefintions
+
+### Using ColumnDefinitions
 Instead of setting the configurations for the whole dataset, you can use a
 `Vector{ColumnDefinition}` to control how each column is handled. `ColumnDefinition` has the
-added benefit of allowing you to ignore certain fields from the input.
+added benefit of allowing you to ignore certain fields from the input. The only difference in the keyword arguments API here is that `column_names` is `column_name` and accepts a single `Symbol`.
 
-```@example
-using ExpandNestedData #hide
-using JSON3 #hide
-using DataFrames #hide
-
-message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4], :c => 1), Dict(:b => []) ], :d => 4) #hide
+```@example 1
 
 column_defs = [
     ColumnDefinition([:d]; column_name = :ColumnD),
@@ -82,16 +69,12 @@ column_defs = [
 
 expand(message, column_defs) |> DataFrame
 ```
-The only difference in the kwargs API here is that `column_names` is `column_name` and accepts
-a single `Symbol`.
 
 ### ColumnStyles
 In the examples above, we've used `flat_columns` style. However, we can also maintain the nesting hierarchy
 of the source data. 
-```@example
-using ExpandNestedData #hide
-using JSON3 #hide
-message = Dict( :a => [ Dict(:b => 1, :c => 2), Dict(:b => 2), Dict(:b => [3, 4], :c => 1), Dict(:b => []) ], :d => 4) #hide
+
+```@example 1
 using TypedTables
 
 tbl = expand(message; column_style = nested_columns)
@@ -102,6 +85,6 @@ tbl |> rows |> first
 
 ## API
 ```@docs
-ExpandNestedData.expand(::Any, ::Vector{ExpandNestedData.ColumnDefinition})
-ExpandNestedData.ColumnDefinition(::Any;)
+expand(::Any, ::Vector{ExpandNestedData.ColumnDefinition})
+ColumnDefinition(::Any;)
 ```
