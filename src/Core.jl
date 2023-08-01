@@ -237,7 +237,6 @@ each ColumnSet such that you get the Cartesian Product of their join.
 function merge_cols!(set_num, column_stack, csm)
     col_set = pop!(column_stack)
     multiplier = column_length(col_set)
-    x = 10
     for _ in 2:set_num
         new_col_set = pop!(column_stack)
         if length(new_col_set) == 0
