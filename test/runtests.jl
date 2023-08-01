@@ -334,6 +334,21 @@ end
             unordered_equal(ExpandNestedData.expand(input), output)
         end
 
+        # Test multiple missing columns in array
+        @test begin
+            input = [
+                Dict(:a=>1),
+                Dict(:a=>2),
+                Dict(:a=>3),
+                Dict(:a=>4, :b =>5),
+            ]
+            output = (
+                a = [1,2,3,4],
+                b = [missing,missing,missing,5]
+            )
+            unordered_equal(ExpandNestedData.expand(input), output)
+        end
+
         # Using struct of struct as input
         @test begin
             expected_table_expanded = (

@@ -23,7 +23,7 @@ Base.iterate(::CaptureList, ::CaptureListNil) = nothing
     RawSeed(::NameID)
     RawRepeat(::Int64)
     RawCycle(::Int64)
-    RawVcat(::Int64, ::CaptureList{IterCapture}, ::CaptureList{IterCapture})
+    RawVcat(::Int64, ::CaptureList{<:IterCapture}, ::CaptureList{<:IterCapture})
 end
 
 
@@ -142,9 +142,11 @@ function _vcat(csm, c1::RawNestedIterator, c2::RawNestedIterator)
     c2_len = length(c2)
     c1_len == 0 && return c2
     c2_len == 0 && return c1
+    len = c1_len + c2_len
     
     T1 = c1.el_type
     T2 = c2.el_type
+
     only_one_value = if T1 === T2 && c1.one_value && c2.one_value
         v1 = get_single_value(csm, c1.unique_val, T1)
         v2 = get_single_value(csm, c2.unique_val, T1)
@@ -153,14 +155,10 @@ function _vcat(csm, c1::RawNestedIterator, c2::RawNestedIterator)
         false
     end
 
-    type = Union{T1, T2}
-    len = c1_len + c2_len
-
-    if only_one_value
-        c1.column_length = len
-        return c1
-    end
+    only_one_value && return RawNestedIterator(c1.get_index, len, T1, true, c1.unique_val)
     
+    type = Union{T1, T2}
+        
     return RawNestedIterator(
         CaptureList(IterCapture'.RawVcat(c1_len, c1.get_index, c2.get_index)),
         len, type, false, no_name_id

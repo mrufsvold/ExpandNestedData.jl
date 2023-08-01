@@ -276,7 +276,8 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
     while !all(length(cs)==0 for cs in columns_to_stack)
         first_key = minimum(get_first_key, columns_to_stack)
         matching_cols = (pop!(cs, first_key, default_col) for cs in columns_to_stack)
-        push!(new_column_set, first_key=>foldl(vcat, matching_cols))
+        new_column = foldl(vcat, matching_cols)
+        push!(new_column_set, first_key=>new_column)
     end
 
     # free the column_sets that are no longer needed
