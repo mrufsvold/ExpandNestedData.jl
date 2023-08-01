@@ -139,7 +139,7 @@ function process_dict!(parent_name_list, data, node, instruction_stack, csm)
 
     for child_node in child_nodes
         name_id = get_name(child_node)
-        @debug "getting information for child" name=name node=child_node
+        @debug "getting information for child" node=child_node
         name_list = NameList(parent_name_list, name_id)
         # TODO we have to do this lookup twice (once to make id, once to get name back)
         # it would be better to zip up the name_ids with the values as they're constructed
