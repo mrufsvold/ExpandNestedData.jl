@@ -1,4 +1,4 @@
-import .NestedIterators: RawNestedIterator, NestedVcat
+import .NestedIterators: RawNestedIterator
 import .ColumnSetManagers: ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key, 
                 get_total_length, column_length, set_length!, free_column_set!, build_final_column_set
 import .PathGraph: make_path_graph, get_children, SimpleNode
@@ -36,7 +36,6 @@ function expand(data, column_definitions=nothing;
         column_names::Dict = Dict{Tuple, Symbol}(),
         column_style::Symbol=:flat, 
         name_join_pattern = "_")
-
     typed_column_style = get_column_style(column_style)
     csm = ColumnSetManager()
     path_graph = make_path_graph(csm, column_definitions)
@@ -263,7 +262,6 @@ If a column name is present in one set but not in the other, then insert a defau
 """
 function stack_cols!(column_set_num, column_stack, default_col, csm)
     columns_to_stack = @view column_stack[end-column_set_num+1:end]
-
     new_column_set = get_column_set(csm)
     total_len = get_total_length(columns_to_stack)
     set_length!(new_column_set, total_len)
@@ -272,11 +270,10 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
     # We go down each columnset and check if it has a matching key.
     # From there, we either pop! the column if the key matches or create a default column and add
     # it to the stack
-    vcat = NestedVcat(csm)
     while !all(length(cs)==0 for cs in columns_to_stack)
         first_key = minimum(get_first_key, columns_to_stack)
         matching_cols = (pop!(cs, first_key, default_col) for cs in columns_to_stack)
-        new_column = foldl(vcat, matching_cols)
+        new_column = vcat(matching_cols...)
         push!(new_column_set, first_key=>new_column)
     end
 

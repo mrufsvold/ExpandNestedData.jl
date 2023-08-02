@@ -53,7 +53,11 @@ end
 function unordered_equal(t1, t2)
     fields = keys(t1)
     len = length(t1[1])
-    Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+    matches = Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+    if !matches
+        @show t1 t2
+    end
+    return matches
 end
 
 function all_equal(arr)
@@ -81,8 +85,7 @@ end
             @test [1,2] == collect(iter1_2(), csm)
             @test [1,2,1,2] == collect(NestedIterators.cycle(iter1_2(), 2), csm)
             @test [1,1,2,2] == collect(NestedIterators.repeat_each(iter1_2(), 2), csm)
-            ex_vcat = NestedIterators.NestedVcat(csm)
-            @test [1,2,1,2] == collect(ex_vcat(iter1_2(), iter1_2()), csm)
+            @test [1,2,1,2] == collect(vcat(iter1_2(), iter1_2()), csm)
             col_set = ExpandNestedData.ColumnSet(
                 NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
                 NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2]),
