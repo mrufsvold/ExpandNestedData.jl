@@ -259,9 +259,7 @@ end
     build_final_column_set(csm::ColumnSetManager, raw_cs)
 Take a ColumnSet with ID keys and reconstruct a column_set with actual names keys
 """
-function build_final_column_set(csm::ColumnSetManager, raw_cs)
-    # todo -- we could track the longest field_path and then make the tuple length known
-    # todo -- can the final columnset be changed to symbols at this point?
+function build_final_column_set(csm::ColumnSetManager, raw_cs::ColumnSet)
     final_cs = OrderedRobinDict{Tuple, NestedIterator}()
     for (raw_id, column) in pairs(raw_cs)
         field_path = reconstruct_field_path(csm, raw_id)

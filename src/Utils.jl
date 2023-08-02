@@ -58,3 +58,53 @@ function safe_peel(itr)
     end
     return (first(itr), @view itr[2:end])
 end
+
+
+"""make_switch(fs, lengths)
+Create a switching function that takes an integer `i` and compares it against 
+each length provided in order. Once it accumulates the sum of lengths greater than or equal to 
+`i`, it subtracts the previous total length and runs the corresponding function.
+"""
+function make_switch(fs, lengths)
+    func_def = compose_switch_body(fs,lengths)
+    @eval $func_def
+end
+
+function compose_switch_body(fs,lengths)
+    total_len = sum(lengths)
+
+    _fs = Iterators.Stateful(fs)
+    _lengths = Iterators.Stateful(lengths)
+    
+    l = popfirst!(_lengths)
+    if_stmt = :(
+        if i <= $(l) 
+            $(popfirst!(_fs))(i)
+        end
+    )
+    
+    curr_stmt = if_stmt
+    prev_l = l
+    for (f,l) in zip(_fs, _lengths)
+        curr_l = l + prev_l
+        ex = Expr(
+            :elseif, 
+            :(i <= $(curr_l)),
+            :($f(i-$prev_l))
+        )
+        push!(curr_stmt.args, ex)
+        prev_l = curr_l
+        curr_stmt = ex
+    end
+    
+    name = gensym("unvcat_switch")
+    func_def = :(
+        function $(name)(i)
+            i > $total_len && error("Attempted to access $total_len-length vector at $i")
+            $if_stmt
+        end
+    )
+    return func_def
+end
+
+opcompose(f,g) = g ∘ f

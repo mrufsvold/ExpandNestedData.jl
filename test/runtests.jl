@@ -53,7 +53,11 @@ end
 function unordered_equal(t1, t2)
     fields = keys(t1)
     len = length(t1[1])
-    Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+    matches = Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+    if !matches
+        @show t1 t2
+    end
+    return matches
 end
 
 function all_equal(arr)
@@ -81,8 +85,7 @@ end
             @test [1,2] == collect(iter1_2(), csm)
             @test [1,2,1,2] == collect(NestedIterators.cycle(iter1_2(), 2), csm)
             @test [1,1,2,2] == collect(NestedIterators.repeat_each(iter1_2(), 2), csm)
-            ex_vcat = NestedIterators.NestedVcat(csm)
-            @test [1,2,1,2] == collect(ex_vcat(iter1_2(), iter1_2()), csm)
+            @test [1,2,1,2] == collect(vcat(iter1_2(), iter1_2()), csm)
             col_set = ExpandNestedData.ColumnSet(
                 NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
                 NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2]),
@@ -321,13 +324,41 @@ end
             unordered_equal(actual_expanded_table, expected_table_expanded)
         end
 
+        # Test mismatched Array length
+        @test begin
+            input = Dict(
+                :arr1 => [1,2,3],
+                :arr2 => [4,5]
+            )
+            output = (
+                arr1 = [1,1,2,2,3,3],
+                arr2 = [4,5,4,5,4,5]
+            )
+            unordered_equal(ExpandNestedData.expand(input), output)
+        end
+
+        # Test multiple missing columns in array
+        @test begin
+            input = [
+                Dict(:a=>1),
+                Dict(:a=>2),
+                Dict(:a=>3),
+                Dict(:a=>4, :b =>5),
+            ]
+            output = (
+                a = [1,2,3,4],
+                b = [missing,missing,missing,5]
+            )
+            unordered_equal(ExpandNestedData.expand(input), output)
+        end
+
         # Using struct of struct as input
         @test begin
             expected_table_expanded = (
                 new_column=[1,2,3,4,nothing], 
                 a_c=[2,nothing,1,1, nothing], 
                 d=[4,4,4,4,4])
-                unordered_equal(
+            unordered_equal(
                 ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)), 
                 expected_table_expanded)
         end

@@ -2,9 +2,12 @@ module NestedIterators
 using PooledArrays
 using SumTypes
 using Compat
+using Accessors
 using ..NameLists: NameID, no_name_id
 import ..get_name
 import ..get_id
+import ..make_switch
+import ..opcompose
 
 struct CaptureListNil end
 """A node in a linked list of captured iteration instructions"""
@@ -23,11 +26,11 @@ Base.iterate(::CaptureList, ::CaptureListNil) = nothing
     RawSeed(::NameID)
     RawRepeat(::Int64)
     RawCycle(::Int64)
-    RawVcat(::Int64, ::CaptureList{IterCapture}, ::CaptureList{IterCapture})
+    RawVcat(::Vector{Int64}, ::Vector{CaptureList{<:IterCapture}})
 end
 
 
-mutable struct RawNestedIterator
+struct RawNestedIterator
     get_index::Union{CaptureListNil,CaptureList}
     column_length::Int64
     el_type::Type
@@ -81,6 +84,10 @@ function Base.isequal(rni1::RawNestedIterator, rni2::RawNestedIterator, csm)
     end
     return isequal(collect(rni1, csm), collect(rni2, csm))
 end
+get_index_captures(rni::RawNestedIterator) = rni.get_index
+is_single_value(rni::RawNestedIterator) = rni.one_value
+get_unique_val(rni::RawNestedIterator) = rni.unique_val
+get_el_type(rni::RawNestedIterator) = rni.el_type
 
 
 """Seed is the core starter for a NestedIterator"""
@@ -100,12 +107,11 @@ end
 (u::UnrepeatEach)(i) = ceil(Int64, i/u.n)
 
 function repeat_each(c::RawNestedIterator, n)
+    @reset c.column_length = length(c) * n
     # when there is only one unique value, we can skip composing the repeat_each step
-    c.column_length *= n
-    if c.one_value
-        return c
-    end
-    c.get_index = CaptureList(IterCapture'.RawRepeat(n), c.get_index)
+    c.one_value && return c
+
+    @reset c.get_index = CaptureList(IterCapture'.RawRepeat(n), c.get_index)
     return c
 end
 
@@ -117,82 +123,48 @@ end
 """cycle(c, n) cycles through an array N times"""
 function cycle(c::RawNestedIterator, n)
     original_len = c.column_length
+    @reset c.column_length = original_len * n
+    
     # when there is only one unique value, we can skip composing the uncycle step
-    c.column_length *= n
-    if c.one_value
-        return c
-    end
-    c.get_index = CaptureList(IterCapture'.RawCycle(original_len), c.get_index)
+    c.one_value && return c
+
+    @reset c.get_index = CaptureList(IterCapture'.RawCycle(original_len), c.get_index)
     return c
 end
 
 """Captures the two getindex functions of vcated NestedIterators. f_len tells which index to break over to g."""
-struct Unvcat{F, G} 
-    f_len::Int64
+struct Unvcat{F}
     f::F
-    g::G 
 end
-(u::Unvcat)(i) = i > u.f_len ? u.g(i-u.f_len) : u.f(i)
+function Unvcat(csm, lengths, captures)
+    funcs = (build_get_index(csm, cap) for cap in captures)
+    f = make_switch(funcs, lengths)
+    return Unvcat{typeof(f)}(f)
+end
+(u::Unvcat)(i) = u.f(i)
 
-"""vcat(csm::ColumnSetManger, c1::RawNestedIterator, c2::RawNestedIterator)
-Return a single NestedIterator which is the result of vcat(c1,c2)
+"""vcat(iters::RawNestedIterator...)
+Return a single RawNestedIterator which is the result of stacking the iterators
 """
-function _vcat(csm, c1::RawNestedIterator, c2::RawNestedIterator)
-    c1_len = length(c1)
-    c2_len = length(c2)
-    c1_len == 0 && return c2
-    c2_len == 0 && return c1
-    
-    T1 = c1.el_type
-    T2 = c2.el_type
-    only_one_value = if T1 === T2 && c1.one_value && c2.one_value
-        v1 = get_single_value(csm, c1.unique_val, T1)
-        v2 = get_single_value(csm, c2.unique_val, T1)
-        isequal(v1, v2)
-    else
-        false
+function Base.vcat(iters::RawNestedIterator...)
+    lengths = length.(iters)
+    len = sum(lengths)
+
+    if all(is_single_value, iters) && allequal(Iterators.map(get_unique_val, iters))
+        iter = first(iters)
+        return @set iter.column_length = len
     end
 
-    type = Union{T1, T2}
-    len = c1_len + c2_len
+    caps_list = collect(get_index_captures.(iters))
+    type = Union{(getproperty(iter,:el_type) for iter in iters)...}
 
-    if only_one_value
-        c1.column_length = len
-        return c1
-    end
-    
-    return RawNestedIterator(
-        CaptureList(IterCapture'.RawVcat(c1_len, c1.get_index, c2.get_index)),
-        len, type, false, no_name_id
-    )
-end
-"""Get a value stored in the ColumnSetManager and assert the return type of the value"""
-get_single_value(csm, id, ::Type{T}) where T = first(get_name(csm, id))::T
-
-"""Callable struct that stores a ColumnSetManager to allow a two arg function for vcat-ing RawNestedIterators with folds"""
-struct NestedVcat{T} <: Function
-    csm::T
-end
-(v::NestedVcat)(c1,c2) = _vcat(v.csm, c1, c2)
-(v::NestedVcat)(c1) = c1
-
-"""Compose a get_index function out of the list of captured instructions from a RawNestedIterator"""
-function build_get_index(csm, captures)
-    iter_funcs = Iterators.map(cap -> get_iter_func(csm, cap), captures)
-    return foldl((f,g) -> g ∘ f, iter_funcs)
+    RawNestedIterator(
+        CaptureList(IterCapture'.RawVcat(collect(lengths), caps_list)), len, type, false, no_name_id)
 end
 
-"""Construct the correct iterator capture function for the given IterCapture"""
-function get_iter_func(csm, capture::IterCapture)
-    @cases capture begin
-        RawSeed(id) => Seed(get_name(csm, id))
-        RawRepeat(n) => UnrepeatEach(n)
-        RawCycle(n) => Uncycle(n)
-        RawVcat(len, iter1, iter2) => Unvcat(len, build_get_index(csm, iter1), build_get_index(csm, iter2))
-    end
-end
 
-"""NestedIterator is a container for instructions that build columns"""
+"""NestedIterator is a finalized column with a custom function to reproduce the order 
+that the data was found and unpacked"""
 struct NestedIterator{T,F} <: AbstractArray{T, 1}
     get_index::F
     column_length::Int64
@@ -209,6 +181,24 @@ Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
 Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
 Base.eachindex(ni::NestedIterator) = 1:length(ni)
-Base.collect(x::NestedIterator, pool_arrays=false) = pool_arrays ? PooledArray(x) : Vector(x)
+Base.collect(x::NestedIterator, pool_arrays=false) = Base.invokelatest(_collect, x, pool_arrays)
+_collect(x, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
+
+"""Compose a get_index function out of the list of captured instructions from a RawNestedIterator"""
+function build_get_index(csm, captures)
+    f = (cap) -> get_iter_func(csm, cap)
+    return mapfoldl(f, opcompose, captures)
+end
+
+"""Construct the correct iterator capture function for the given IterCapture"""
+function get_iter_func(csm, capture::IterCapture)
+    @cases capture begin
+        RawSeed(id) => Seed(get_name(csm, id))
+        RawRepeat(n) => UnrepeatEach(n)
+        RawCycle(n) => Uncycle(n)
+        RawVcat(lengths, captures_lists) => Unvcat(csm, lengths, captures_lists)
+    end
+end
+
 
 end #NestedIterators
