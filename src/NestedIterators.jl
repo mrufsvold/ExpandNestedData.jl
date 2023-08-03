@@ -128,7 +128,8 @@ function cycle(c::RawNestedIterator, n)
     # when there is only one unique value, we can skip composing the uncycle step
     c.one_value && return c
 
-    @reset c.get_index = CaptureList(IterCapture'.RawCycle(original_len), c.get_index)
+    new_step = IterCapture'.RawCycle(original_len)
+    @reset c.get_index = CaptureList(new_step, c.get_index)
     return c
 end
 
