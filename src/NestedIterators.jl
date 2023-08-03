@@ -9,6 +9,7 @@ import ..get_id
 import ..make_switch
 import ..opcompose
 
+
 struct CaptureListNil end
 """A node in a linked list of captured iteration instructions"""
 struct CaptureList{T}
@@ -17,9 +18,6 @@ struct CaptureList{T}
 end
 CaptureList(seed) = CaptureList(seed, CaptureListNil())
 
-Base.iterate(cl::CaptureList) = (cl.head, cl.tail)
-Base.iterate(::CaptureList, state::CaptureList) = iterate(state)
-Base.iterate(::CaptureList, ::CaptureListNil) = nothing
 
 # IterCapture enumerates the kinds of instructions that can be captured and holds the values of those captures
 @sum_type IterCapture :hidden begin
@@ -67,6 +65,7 @@ function RawNestedIterator(value_id::NameID, ::Type{T}, is_one::Bool, len::Int64
 end
 RawNestedIterator() = RawNestedIterator(CaptureListNil(), 0, Union{}, false, no_name_id)
 
+# RawNestedIterator Interface
 Base.length(rni::RawNestedIterator) = rni.column_length
 Base.size(rni::RawNestedIterator) = (rni.column_length,)
 Base.collect(rni::RawNestedIterator, csm) = collect(NestedIterator(csm, rni))
@@ -84,11 +83,39 @@ function Base.isequal(rni1::RawNestedIterator, rni2::RawNestedIterator, csm)
     end
     return isequal(collect(rni1, csm), collect(rni2, csm))
 end
+# Accessors
 get_index_captures(rni::RawNestedIterator) = rni.get_index
 is_single_value(rni::RawNestedIterator) = rni.one_value
 get_unique_val(rni::RawNestedIterator) = rni.unique_val
 get_el_type(rni::RawNestedIterator) = rni.el_type
 
+
+"""NestedIterator is a finalized column with a custom function to reproduce the order 
+that the data was found and unpacked"""
+struct NestedIterator{T,F} <: AbstractArray{T, 1}
+    get_index::F
+    column_length::Int64
+    el_type::Type{T}
+    function NestedIterator(get_index, column_length, el_type)
+        return new{el_type, typeof(get_index)}(get_index, column_length, el_type)
+    end
+end
+function NestedIterator(csm, raw::RawNestedIterator)
+    get_index = build_get_index(csm, raw.get_index)
+    return NestedIterator(get_index, length(raw), raw.el_type)
+end
+# NestedIterator Interface
+Base.length(ni::NestedIterator) = ni.column_length
+Base.size(ni::NestedIterator) = (ni.column_length,)
+Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
+Base.eachindex(ni::NestedIterator) = 1:length(ni)
+Base.collect(x::NestedIterator, pool_arrays=false) = Base.invokelatest(_collect, x, pool_arrays)
+_collect(x, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
+
+
+
+##### This are the various kinds of iteration steps we can capture ####
+#######################################################################
 
 """Seed is the core starter for a NestedIterator"""
 struct Seed{T}
@@ -163,27 +190,6 @@ function Base.vcat(iters::RawNestedIterator...)
         CaptureList(IterCapture'.RawVcat(collect(lengths), caps_list)), len, type, false, no_name_id)
 end
 
-
-"""NestedIterator is a finalized column with a custom function to reproduce the order 
-that the data was found and unpacked"""
-struct NestedIterator{T,F} <: AbstractArray{T, 1}
-    get_index::F
-    column_length::Int64
-    el_type::Type{T}
-    function NestedIterator(get_index, column_length, el_type)
-        return new{el_type, typeof(get_index)}(get_index, column_length, el_type)
-    end
-end
-function NestedIterator(csm, raw::RawNestedIterator)
-    get_index = build_get_index(csm, raw.get_index)
-    return NestedIterator(get_index, length(raw), raw.el_type)
-end
-Base.length(ni::NestedIterator) = ni.column_length
-Base.size(ni::NestedIterator) = (ni.column_length,)
-Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
-Base.eachindex(ni::NestedIterator) = 1:length(ni)
-Base.collect(x::NestedIterator, pool_arrays=false) = Base.invokelatest(_collect, x, pool_arrays)
-_collect(x, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
 
 """Compose a get_index function out of the list of captured instructions from a RawNestedIterator"""
 function build_get_index(csm, captures)
