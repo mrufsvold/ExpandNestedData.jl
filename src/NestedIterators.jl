@@ -2,7 +2,7 @@ module NestedIterators
 using PooledArrays
 using SumTypes
 using Compat
-using Accessors
+using Accessors: @reset, @set
 using ..NameLists: NameID, no_name_id
 import ..get_name
 import ..get_id
