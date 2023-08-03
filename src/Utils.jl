@@ -1,5 +1,4 @@
 # helper functions for inspecting types for container traits
-is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
 
@@ -98,13 +97,12 @@ function compose_switch_body(fs,lengths)
     end
     
     name = gensym("unvcat_switch")
+    error_str = "Attempted to access $total_len-length vector at index "
     func_def = :(
         function $(name)(i)
-            i > $total_len && error("Attempted to access $total_len-length vector at $i")
+            i > $(total_len) && error($error_str * "$i")
             $if_stmt
         end
     )
     return func_def
 end
-
-opcompose(f,g) = g ∘ f

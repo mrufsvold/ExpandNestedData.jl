@@ -266,7 +266,7 @@ function stack_cols!(column_set_num, column_stack, default_col, csm)
     total_len = get_total_length(columns_to_stack)
     set_length!(new_column_set, total_len)
 
-    # Since the column_sets are already sorted by key, the minimum first key in a columnset
+    # Since the column_sets are already sorted by key, the minimum is the first key in a columnset
     # We go down each columnset and check if it has a matching key.
     # From there, we either pop! the column if the key matches or create a default column and add
     # it to the stack
