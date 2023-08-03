@@ -1,5 +1,4 @@
 # helper functions for inspecting types for container traits
-is_NameValueContainer(t) = typeof(StructTypes.StructType(t)) <: NameValueContainer
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 is_value_type(t::Type) = !is_container(t) && isconcretetype(t)
 
@@ -107,5 +106,3 @@ function compose_switch_body(fs,lengths)
     )
     return func_def
 end
-
-opcompose(f,g) = g ∘ f
