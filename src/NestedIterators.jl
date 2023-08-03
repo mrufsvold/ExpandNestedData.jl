@@ -186,9 +186,18 @@ _collect(x, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
 
 """Compose a get_index function out of the list of captured instructions from a RawNestedIterator"""
 function build_get_index(csm, captures)
-    f = (cap) -> get_iter_func(csm, cap)
-    return mapfoldl(f, opcompose, captures)
+    cap = captures.head
+    new_f = get_iter_func(csm, cap)
+    build_get_index(new_f, csm, captures.tail)
 end
+build_get_index(current_f, csm, cap) = build_get_index(current_f, csm, cap.head, cap.tail)
+build_get_index(current_f, _, ::CaptureListNil) = current_f
+function build_get_index(current_f, csm, cap, cap_tail)
+    new_f = get_iter_func(csm, cap) ∘ current_f
+    build_get_index(new_f, csm, cap_tail.head, cap_tail.tail)
+end
+build_get_index(current_f, csm, cap, ::CaptureListNil) = get_iter_func(csm, cap) ∘ current_f
+
 
 """Construct the correct iterator capture function for the given IterCapture"""
 function get_iter_func(csm, capture::IterCapture)
