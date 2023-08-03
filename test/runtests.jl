@@ -352,6 +352,17 @@ end
             unordered_equal(ExpandNestedData.expand(input), output)
         end
 
+        # test world age problem with get index and evaled switch function
+        @test begin
+            function test_world_age(input)
+                t = expand(input; lazy_columns=true)
+                first_el = t.a_b[1]
+                comprehension_collect = [el for el in t.a_b]
+                return isequal(first_el, first(comprehension_collect))
+            end
+            test_world_age(test_body)
+        end
+
         # Using struct of struct as input
         @test begin
             expected_table_expanded = (

@@ -107,10 +107,34 @@ end
 # NestedIterator Interface
 Base.length(ni::NestedIterator) = ni.column_length
 Base.size(ni::NestedIterator) = (ni.column_length,)
-Base.getindex(ni::NestedIterator, i) = ni.get_index(i)
+function Base.getindex(ni::NestedIterator, i)
+    @warn "Using getindex directly with a NestedIterator is slow. Consider using `collect` first to return a regular vector if you need to access all the elements; this will be much faster."
+    Base.invokelatest(ni.get_index, i)
+end
 Base.eachindex(ni::NestedIterator) = 1:length(ni)
-Base.collect(x::NestedIterator, pool_arrays=false) = Base.invokelatest(_collect, x, pool_arrays)
-_collect(x, pool_arrays) = pool_arrays ? PooledArray(x) : Vector(x)
+Base.collect(ni::NestedIterator, pool_arrays=false) = Base.invokelatest(_collect, ni, pool_arrays)
+_collect(ni, pool_arrays) = pool_arrays ? PooledArray(ni) : __collect(ni)
+function __collect(ni::NestedIterator)
+    arr = Vector{eltype(ni)}(undef, length(ni))
+    for i in eachindex(ni)
+        arr[i] = ni.get_index(i)
+    end
+    return arr
+end
+
+function Base.iterate(ni::NestedIterator)
+    len = length(ni)
+    len == 0 && return nothing
+    arr = Base.invokelatest(__collect, ni)
+    el = @inbounds arr[1]
+    return (el, (arr, len, 2))
+end
+function Base.iterate(::NestedIterator, state)
+    (arr, len, i) = state
+    i > len && return nothing
+    el = @inbounds arr[i]
+    return (el, (arr, len, i+1))
+end
 
 
 
