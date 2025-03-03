@@ -20,7 +20,7 @@ function Node(name, children)
 end
 function LeafNode(name_path)
     name = last(name_path)
-    default_value = get_default_value(name_path)
+    default_value = nothing#get_default_value(name_path)
     pool_arrays = get_pool_arrays(name_path)
     dtype = get_dtype(name_path)
     return PathNode'.LeafNode(name, default_value, pool_arrays, dtype)
@@ -46,9 +46,6 @@ function get_default_value(node::PathNode)
         LeafNode(_, _, default_value, _) => default_value
         [BranchNode, TopLevelNode] => error("Can't access default value for non-leaf node")
     end
-end
-function get_default_value(::Any)
-    return DEFAULT_MISSING[]
 end
 function get_pool_arrays(node::PathNode)
     return @cases node begin
