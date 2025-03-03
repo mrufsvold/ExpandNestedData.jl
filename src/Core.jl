@@ -1,5 +1,3 @@
-using ScopedValues: with
-
 import .NestedIterators: RawNestedIterator
 import .ColumnSetManagers: ColumnSet, cycle_columns_to_length!, repeat_each_column!, get_first_key,
                 get_total_length, column_length, set_length!, free_column_set!, build_final_column_set
@@ -43,14 +41,14 @@ function expand(data, column_definitions=nothing;
     typed_column_style = get_column_style(column_style)
 
     if use_v2 && isnothing(column_definitions)
-        return with(ExpandNestedData2.DEFAULT_MISSING => default_value) do
-            ExpandNestedData2.expand(data;
-                pool_arrays=pool_arrays,
-                lazy_columns=lazy_columns,
-                name_join_pattern=name_join_pattern,
-                column_style=column_style
-                )
-        end
+        return ExpandNestedData2.expand(data;
+            default_value=default_value,
+            pool_arrays=pool_arrays,
+            lazy_columns=lazy_columns,
+            name_join_pattern=name_join_pattern,
+            column_style=column_style,
+            column_names=column_names
+        )
     end
 
     csm = ColumnSetManager()

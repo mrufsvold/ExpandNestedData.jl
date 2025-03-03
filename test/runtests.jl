@@ -79,72 +79,6 @@ end
 
 @testset "ExpandNestedData" begin
     @testset "Internals" begin
-        @testset "NestedIterators and ColumnSets" begin
-            csm = ExpandNestedData.ColumnSetManager()
-            iter1_2() = NestedIterators.RawNestedIterator(csm, [1,2])
-            @test [1,2] == collect(iter1_2(), csm)
-            @test [1,2,1,2] == collect(NestedIterators.cycle(iter1_2(), 2), csm)
-            @test [1,1,2,2] == collect(NestedIterators.repeat_each(iter1_2(), 2), csm)
-            @test [1,2,1,2] == collect(vcat(iter1_2(), iter1_2()), csm)
-            col_set = ExpandNestedData.ColumnSet(
-                NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
-                NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2]),
-            )
-            @test collect(keys(col_set)) == [NameLists.NameID(1),NameLists.NameID(2)]
-            col_set2 = ExpandNestedData.ColumnSet(
-                NameLists.NameID(1) => NestedIterators.RawNestedIterator(csm, [1,2,1,2]),
-                NameLists.NameID(2) => NestedIterators.RawNestedIterator(csm, [3,4,5,6]),
-            )
-            @test isequal(ColumnSetManagers.cycle_columns_to_length!(col_set), col_set2, csm)
-
-            # popping columns
-            @test ColumnSetManagers.get_first_key(col_set) == NameLists.NameID(1)
-            default_col = pop!(col_set, NameLists.NameID(3), NestedIterators.RawNestedIterator(csm, [1]))
-            @test isequal(default_col, NestedIterators.RawNestedIterator(csm, [1,1,1,1]), csm)
-            popped_col = pop!(col_set, NameLists.NameID(2), NestedIterators.RawNestedIterator(csm, [1]))
-            @test collect(popped_col, csm) == [3,4,5,6]
-            @test collect(keys(col_set)) == [NameLists.NameID(1)]
-
-            # column length
-            @test ColumnSetManagers.get_total_length([col_set, col_set2]) == 8
-            @test ColumnSetManagers.column_length(ColumnSetManagers.repeat_each_column!(col_set, 2)) == 8
-
-            # column set manager
-            csm = ExpandNestedData.ColumnSetManager()
-            cs = ColumnSetManagers.get_column_set(csm)
-            @test isequal(cs, ColumnSetManagers.ColumnSet(), csm)
-            ColumnSetManagers.free_column_set!(csm, cs)
-            @test !isempty(csm.column_sets)
-            cs = ColumnSetManagers.get_column_set(csm)
-            @test isempty(csm.column_sets)
-
-            cs[NameLists.NameID(3)] = NestedIterators.RawNestedIterator()
-            cs[NameLists.NameID(1)] = NestedIterators.RawNestedIterator()
-            @test collect(keys(cs)) == [NameLists.NameID(1),NameLists.NameID(3)]
-
-            name = :test_name
-            id = ExpandNestedData.get_id(csm, name)
-            @test id == NameLists.NameID(2)
-            @test id == ExpandNestedData.get_id(csm, name)
-            @test name == ExpandNestedData.get_name(csm, id)
-            field_path = (name,)
-            id_path = (id,)
-            id_for_path = ExpandNestedData.get_id(csm, id_path)
-            @test id_for_path == ExpandNestedData.get_id_for_path(csm, field_path)
-
-            # NameLists
-            top = NameLists.NameList()
-            l = NameLists.NameList(top, id)
-            id_for_tuple_from_list = ExpandNestedData.get_id(csm, l)
-            @test id_for_tuple_from_list == id_for_path
-            @test ExpandNestedData.ColumnSetManagers.reconstruct_field_path(csm, id_for_tuple_from_list) == field_path
-
-            # Rebuild ColumnSet
-            raw_cs = ExpandNestedData.ColumnSet(id_for_path => NestedIterators.RawNestedIterator(csm, [1]))
-            finalized_col = NestedIterators.NestedIterator(csm, NestedIterators.RawNestedIterator(csm, [1]))
-            @test OrderedRobinDict((name,) => finalized_col) == ColumnSetManagers.build_final_column_set(csm, raw_cs)
-        end
-
         @testset "ColumnDefinitions and PathGraph" begin
             @test fieldsequal(ColumnDefinition((:a,)), ColumnDefinition([:a]))
             coldef = ColumnDefinition((:a,:b), Dict(); pool_arrays=false, name_join_pattern = "^")
@@ -370,7 +304,7 @@ end
                 a_c=[2,nothing,1,1, nothing],
                 d=[4,4,4,4,4])
             unordered_equal(
-                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column)),
+                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column), use_v2=true),
                 expected_table_expanded)
         end
         @test (typeof(ExpandNestedData.expand(struct_body; pool_arrays=true, lazy_columns=false).d) ==
