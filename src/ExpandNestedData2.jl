@@ -90,6 +90,7 @@ function Base.firstindex(::NamePath)
     return 1
 end
 
+include("ColumnDefinitions2.jl")
 
 """
     get_unique_current_names(name_paths, level)
