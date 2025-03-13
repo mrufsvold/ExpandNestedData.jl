@@ -68,7 +68,7 @@ Return a column definitions that have children for the given name at the given l
 """
 function make_column_def_child_copies(column_defs::AbstractArray{ColumnDefinition}, name, level::Int64)
     mask = map(
-        def -> is_current_name(def, name, level) && length(get_field_path(def)) > level, 
+        def -> is_current_name(def, name, level) && length(get_field_path(def)) > level,
         column_defs
         )
     return view(column_defs, mask)

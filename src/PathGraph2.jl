@@ -10,9 +10,7 @@ using SumTypes
     )
     LeafNode(
         name::Any,
-        default_value::Any,
-        pool_arrays::PoolArrayOptions,
-        dtype::DataType
+        column_definition::ColumnDefinition
     )
 end
 function Node(name, children)
@@ -20,10 +18,13 @@ function Node(name, children)
 end
 function LeafNode(name_path)
     name = last(name_path)
-    default_value = nothing#get_default_value(name_path)
+    default_value = missing#get_default_value(name_path)
     pool_arrays = get_pool_arrays(name_path)
-    dtype = get_dtype(name_path)
-    return PathNode'.LeafNode(name, default_value, pool_arrays, dtype)
+    column_definition = ColumnDefinition(name_path;
+        default_value,
+        pool_arrays
+    )
+    return PathNode'.LeafNode(name, column_definition)
 end
 
 function get_name(node::PathNode)
@@ -37,35 +38,25 @@ function get_children(node::PathNode)
     return @cases node begin
         TopLevelNode(children) => children
         BranchNode(_, children) => children
-        LeafNode(_, _, _, _) => nothing
+        LeafNode(_, _) => nothing
     end
 end
 
 function get_default_value(node::PathNode)
     return @cases node begin
-        LeafNode(_, _, default_value, _) => default_value
+        LeafNode(_, column_definition) => column_definition.default_value
         [BranchNode, TopLevelNode] => error("Can't access default value for non-leaf node")
     end
 end
 function get_pool_arrays(node::PathNode)
     return @cases node begin
-        LeafNode(_, _, _, pool_arrays) => pool_arrays
+        LeafNode(_, column_definition) => column_definition.pool_arrays
         [BranchNode, TopLevelNode] => error("Can't access pool array attribute for non-leaf node")
     end
 end
 
 function get_pool_arrays(::Any)
     return AUTO
-end
-
-function get_dtype(node::PathNode)
-    return @cases node begin
-        LeafNode(_, _, _, dtype) => dtype
-        [BranchNode, TopLevelNode] => error("Can't access dtype for non-leaf node")
-    end
-end
-function get_dtype(::Any)
-    return Any
 end
 
 function make_path_graph(name_paths)
