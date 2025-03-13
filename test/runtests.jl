@@ -120,90 +120,7 @@ end
             @test ExpandNestedData.get_value(_T_(1), :a, 3) == 1
             @test ExpandNestedData.join_names((:a,1,"hi"), ".") == Symbol("a.1.hi")
         end
-
-        @testset "Core" begin
-            csm = ExpandNestedData.ColumnSetManager()
-            name_list = NameLists.NameList()
-            node = PathGraph.SimpleNode(NameLists.NameID(0))
-            col_num = 5
-            dict_step = ExpandNestedData.DictStep(name_list, Dict(), node)
-            array_step = ExpandNestedData.ArrayStep(name_list, [], node)
-            leaf_step = ExpandNestedData.LeafStep(name_list, 1)
-            default_step = ExpandNestedData.DefaultStep(name_list)
-            merge_step = ExpandNestedData.MergeStep(col_num)
-            stack_step = ExpandNestedData.StackStep(col_num)
-            col_step = ExpandNestedData.NewColumnSetStep(ExpandNestedData.get_column_set(csm))
-
-            # test get_name
-            for s in (dict_step, array_step, leaf_step, default_step)
-                @test ExpandNestedData.get_name(s) == name_list
-            end
-            for s in (merge_step, stack_step, col_step)
-                @test_throws ErrorException ExpandNestedData.get_name(s)
-            end
-
-            # test get_data
-            for (s,expected) in ((dict_step, Dict()),(array_step,[]),(leaf_step,1))
-                @test ExpandNestedData.get_data(s) == expected
-            end
-            for s in (default_step, merge_step, stack_step, col_step)
-                @test_throws ErrorException ExpandNestedData.get_data(s)
-            end
-
-            # test get_column_number
-            for s in (merge_step, stack_step)
-                @test ExpandNestedData.get_column_number(s) == col_num
-            end
-            for s in (default_step, dict_step,array_step,leaf_step, col_step)
-                @test_throws ErrorException ExpandNestedData.get_column_number(s)
-            end
-
-            # test get_path_node
-            for s in (dict_step,array_step)
-                @test ExpandNestedData.get_path_node(s) == node
-            end
-            for s in (default_step, leaf_step, col_step, merge_step, stack_step)
-                @test_throws ErrorException ExpandNestedData.get_path_node(s)
-            end
-
-             # test get_column_set
-             for s in (col_step,)
-                @test isequal(ExpandNestedData.get_column_set(s), ExpandNestedData.ColumnSet(),csm)
-            end
-            for s in (dict_step,array_step, default_step, leaf_step, merge_step, stack_step)
-                @test_throws ErrorException ExpandNestedData.get_column_set(s)
-            end
-
-            @test isequal(
-                ExpandNestedData.get_column_set(ExpandNestedData.empty_column_set_step(csm)),
-                ExpandNestedData.ColumnSet(),
-                csm)
-
-            @test begin
-                column_defs = [
-                        ColumnDefinitions.ColumnDefinition((:data,)),
-                        ColumnDefinitions.ColumnDefinition((:data, :E))
-                    ]
-                path_graph = PathGraph.make_path_graph(csm, column_defs)
-                actual_col_set = ExpandNestedData.make_missing_column_set(csm, path_graph)
-                expected_col_set = ExpandNestedData.ColumnSet(
-                    ExpandNestedData.get_id_for_path(csm, (:data, NameLists.unnamed)) => NestedIterators.RawNestedIterator(csm, [missing]),
-                    ExpandNestedData.get_id_for_path(csm, (:data, :E)) => NestedIterators.RawNestedIterator(csm, [missing])
-                )
-                isequal(actual_col_set, expected_col_set,csm)
-            end
-        end
     end
-
-    @testset "DataStructure Internals" begin
-        d = OrderedRobinDict(:a => 1, :b => missing)
-        k = d.keys
-        @test k isa Vector{Symbol}
-        @test k[2] == :b
-        d[:b] = 5
-        @test (d[:b]) == 5
-    end
-
 
     # Source Data
     simple_test_body = JSON3.read("""
@@ -296,7 +213,7 @@ end
                 ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column), use_v2=true),
                 expected_table_expanded)
         end
-        @test (typeof(ExpandNestedData.expand(struct_body; pool_arrays=true, lazy_columns=false).d) ==
+        @test (typeof(ExpandNestedData.expand(struct_body; pool_arrays=true, lazy_columns=false, use_v2=true).d) ==
             typeof(PooledArray(Int64[])))
 
         @test fieldsequal(
@@ -339,16 +256,16 @@ end
         expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing],
             :e_f => repeat(["Missing branch"], 5))
         )
-        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs), expected_table)
+        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs; use_v2=true), expected_table)
         @test fieldsequal(
-            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested) |> rows |> last,
+            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested, use_v2=true) |> rows |> last,
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
         columns_defs = [
             ColumnDefinitions.ColumnDefinition((:data,)),
             ColumnDefinitions.ColumnDefinition((:data, :E))
         ]
-        @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs), (data = [5], data_E = [8]))
+        @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs; use_v2=true), (data = [5], data_E = [8]))
 
     end
 

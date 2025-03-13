@@ -27,6 +27,8 @@ function expand(data;
     )
     col_set = _expand(data, NamePath(), default_value)
 
+    pool_arrays = pool_arrays ? AUTO : NEVER
+
     if column_style == :flat
         column_name_lookup = Dict(
             NamePath(parts...) => replacement
