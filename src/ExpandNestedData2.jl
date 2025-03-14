@@ -40,7 +40,6 @@ function expand(
 	path_graph = make_path_graph(column_definitions; default_value, pool_arrays, name_join_pattern)
 	col_set = _expand(data, NamePath(), path_graph; config)
 
-	pool_arrays = pool_arrays ? MAYBE : FALSE
 
 	if column_style == :flat
 
@@ -59,9 +58,9 @@ function expand(
 			get_flattened_name_column_pair(
 				c,
 				column_name_lookup;
-				pool_arrays,
-				name_join_pattern,
-				lazy_columns,
+				config.pool_arrays,
+				config.name_join_pattern,
+				config.lazy_columns,
 			) for c in col_set
 		)
 
