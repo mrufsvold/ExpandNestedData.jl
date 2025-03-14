@@ -3,6 +3,26 @@ Container = Union{NameValueContainer, StructTypes.ArrayType}
 
 is_container(t) = typeof(StructTypes.StructType(t)) <: Container
 
+@enum TypeKind DICT DATATYPE ARRAY VALUE
+function type_kind(@nospecialize(x))
+    struct_t = StructTypes.StructType(typeof(x))
+    return if struct_t === StructTypes.DictType()
+        DICT
+    elseif struct_t === StructTypes.ArrayType()
+        ARRAY
+    elseif struct_t isa StructTypes.DataType
+        DATATYPE
+    else
+        VALUE
+    end
+end
+is_container(x::TypeKind) = x != VALUE
+is_value(x::TypeKind) = x == VALUE
+is_array(x::TypeKind) = x == ARRAY
+is_dict(x::TypeKind) = x == DICT
+is_datatype(x::TypeKind) = x == DATATYPE
+
+
 @enum ColumnStyle flat_columns nested_columns
 @enum PoolArrayOptions NEVER ALWAYS AUTO
 
@@ -28,5 +48,13 @@ macro getproperty(obj, key, default)
         else
             $default
         end
+    end
+end
+
+function get_property(obj, key, default)
+    if hasproperty(obj, key)
+        return getproperty(obj, key)
+    else
+        return default
     end
 end

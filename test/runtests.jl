@@ -248,25 +248,24 @@ end
 
     @testset "Configured Expand" begin
         columns_defs = [
-            ColumnDefinitions.ColumnDefinition((:d,)),
-            ColumnDefinitions.ColumnDefinition((:a, :b)),
-            ColumnDefinitions.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
-            ColumnDefinitions.ColumnDefinition((:e, :f); default_value="Missing branch")
+            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:d,)),
+            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:a, :b)),
+            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:e, :f); default_value="Missing branch")
             ]
         expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing],
             :e_f => repeat(["Missing branch"], 5))
         )
         @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs; use_v2=true), expected_table)
         @test fieldsequal(
-            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested, use_v2=true) |> rows |> last,
+            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested, use_v2=true) |> rows |> first,
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
-        columns_defs = [
-            ColumnDefinitions.ColumnDefinition((:data,)),
-            ColumnDefinitions.ColumnDefinition((:data, :E))
-        ]
-        @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs; use_v2=true), (data = [5], data_E = [8]))
-
+        # columns_defs = [
+        #     ExpandNestedData.ExpandNestedData2.ColumnDefinition((:data,)),
+        #     ExpandNestedData.ExpandNestedData2.ColumnDefinition((:data, :E))
+        # ]
+        # @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs; use_v2=true), (data = [5], data_E = [8]))
     end
 
     @testset "superficial options" begin

@@ -40,8 +40,8 @@ function expand(data, column_definitions=nothing;
         )
     typed_column_style = get_column_style(column_style)
 
-    if use_v2 && isnothing(column_definitions)
-        return ExpandNestedData2.expand(data;
+    if use_v2
+        return ExpandNestedData2.expand(data, column_definitions;
             default_value=default_value,
             pool_arrays=pool_arrays,
             lazy_columns=lazy_columns,

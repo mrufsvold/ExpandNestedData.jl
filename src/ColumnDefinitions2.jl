@@ -3,15 +3,22 @@ struct ColumnDefinition
     column_name::Symbol
     default_value
     pool_arrays::PoolArrayOptions
+    name_join_pattern::String
 end
 
-function ColumnDefinition(name_parts; column_name=nothing, default_value=missing, pool_arrays=NEVER)
+function ColumnDefinition(name_parts; name_join_pattern = "_", column_name=nothing, default_value=missing, pool_arrays=NEVER)
     name_path = NamePath(name_parts...)
     if isnothing(column_name)
-        column_name = join_name_path(name_parts, "_")
+        column_name = join_name_path(name_path, name_join_pattern)
     end
-    return ColumnDefinition(name_path, Symbol(column_name), default_value, pool_arrays)
+    return ColumnDefinition(name_path, Symbol(column_name), default_value, pool_arrays, name_join_pattern)
 end
+
+Base.getindex(cd::ColumnDefinition, i) = get_name_path(cd)[i]
+Base.length(cd::ColumnDefinition) = length(get_name_path(cd))
+get_name_path(cd::ColumnDefinition) = cd.name_path
+
+make_path_graph(v::AbstractVector{ColumnDefinition}) = make_path_graph(get_name_path.(v))
 
 
 struct Column
@@ -37,4 +44,11 @@ function Base.collect(c::Column; pool_arrays)
 end
 function get_name_path(c::Column)
     return c.name
+end
+
+function new_column_set(np::NamePath, @nospecialize(data))
+    Column[Column(np, seed(data))]
+end
+function new_column_set_from_vec(np::NamePath, @nospecialize(data), @nospecialize(default_value))
+    Column[Column(np, seed_vector(data, default_value))]
 end
