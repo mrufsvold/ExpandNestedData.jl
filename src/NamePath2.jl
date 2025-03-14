@@ -12,6 +12,13 @@ get_is_array(np::NamePart) = np.is_array
 
 Base.string(np::NamePart) = string(np.name)
 
+function to_string(np::NamePart; track_array=false)
+    if track_array
+        return string(np.name, if np.is_array == TRUE "[*]" else "" end)
+    end
+    return string(np.name)
+end
+
 @auto_hash_equals struct NamePath
     parts::Vector{NamePart}
     NamePath(v::Vector{NamePart}) = new(v)
@@ -74,29 +81,9 @@ function join_name_path(np::NamePath, join_pattern)
     return Symbol(joined)
 end
 
-
-
-function collapse_names(name_paths::Vector{NamePath})
-    if length(name_paths) <= 1
-        return name_paths
-    end
-
-    unique_nps = unique(name_paths)
-    for i in eachindex(unique_nps)
-        np = unique_nps[i]
-        group = ifilter(==(np), name_paths)
-        for j in eachindex(np)
-            np.parts[j] = NamePart(np[j].name,
-                mapreduce(x -> get_is_array(x[j]), maybe_and, group)
-            )
-        end
-        # need to rebuild because of the hash since we mutated in place
-        unique_nps[i] = NamePath(np.parts)
-    end
-    return unique_nps
+function xpath(np::NamePath)
+    Symbol(join(to_string.(np.parts; track_array=true), "/"))
 end
-
-
 
 """
     get_unique_current_names(name_paths, level)

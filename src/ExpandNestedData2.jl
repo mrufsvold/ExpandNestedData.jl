@@ -21,7 +21,7 @@ include("PathGraph2.jl")
     pool_arrays::MaybeBool
     name_join_pattern::String
     lazy_columns::Bool
-    track_array_path::Bool
+    use_xpath_names::Bool
 end
 
 function expand(
@@ -33,16 +33,15 @@ function expand(
 	column_style = :flat,
 	lazy_columns = false,
 	column_names = (),
-    track_array_path = false
+    use_xpath_names = false
 )
-    config = Configuration(; default_value, pool_arrays, name_join_pattern, lazy_columns, track_array_path)
+    config = Configuration(; default_value, pool_arrays, name_join_pattern, lazy_columns, use_xpath_names)
 
 	path_graph = make_path_graph(column_definitions; default_value, pool_arrays, name_join_pattern)
 	col_set = _expand(data, NamePath(), path_graph; config)
 
 
 	if column_style == :flat
-
 		column_name_lookup = @cases path_graph begin
             NothingNode => Dict(
                 NamePath(parts...) => replacement
@@ -55,13 +54,8 @@ function expand(
         end
 
 		final_pairs = (
-			get_flattened_name_column_pair(
-				c,
-				column_name_lookup;
-				config.pool_arrays,
-				config.name_join_pattern,
-				config.lazy_columns,
-			) for c in col_set
+			get_flattened_name_column_pair(c, column_name_lookup; config)
+            for c in col_set
 		)
 
 		# TODO make this a FlexTable before 2.0
@@ -81,19 +75,21 @@ end
 function get_flattened_name_column_pair(
 	column,
 	column_name_lookup;
-	pool_arrays,
-	name_join_pattern,
-	lazy_columns,
+	config
 )
-	name = @get(
-		column_name_lookup,
-		column.name,
-		join_name_path(column.name, name_join_pattern)
-	)
-	data = if lazy_columns
+    name = if config.use_xpath_names
+        xpath(column.name)
+    else
+        @get(
+            column_name_lookup,
+            column.name,
+            join_name_path(column.name, config.name_join_pattern)
+        )
+    end
+	data = if config.lazy_columns
 		column.data
 	else
-		collect(column; pool_arrays = pool_arrays)
+		collect(column; pool_arrays = config.pool_arrays)
 	end
 	return name => data
 end

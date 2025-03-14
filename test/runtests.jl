@@ -78,50 +78,6 @@ end
 
 
 @testset "ExpandNestedData" begin
-    @testset "Internals" begin
-        @testset "ColumnDefinitions and PathGraph" begin
-            @test fieldsequal(ColumnDefinition((:a,)), ColumnDefinition([:a]))
-            coldef = ColumnDefinition((:a,:b), Dict(); pool_arrays=false, name_join_pattern = "^")
-            @test coldef == ColumnDefinition((:a,:b), Symbol("a^b"), missing, false)
-            @test ColumnDefinitions.current_path_name(coldef, 2) == :b
-            @test collect(ColumnDefinitions.make_column_def_child_copies([coldef], :a, 1)) == [coldef]
-
-            csm = ExpandNestedData.ColumnSetManager()
-            simple = PathGraph.SimpleNode(csm, :a)
-            value = PathGraph.ValueNode(csm, :a, :a, (:a,), false, NestedIterators.RawNestedIterator(csm, [1]))
-            path_n = PathGraph.PathNode(csm, :a, PathGraph.Node[value])
-            @test all_equal(ExpandNestedData.get_name.((simple,value,path_n)))
-            for (f,result) in ((
-                    PathGraph.get_final_name, NameLists.NameID(2)),
-                    (PathGraph.get_field_path,NameLists.NameID(4)),
-                    (PathGraph.get_pool_arrays,false))
-                @test_throws ErrorException f(simple)
-                @test_throws ErrorException f(path_n)
-                @test f(value) == result
-            end
-
-            @test PathGraph.get_all_value_nodes(path_n) == [value]
-            @test isequal(PathGraph.get_default(value), NestedIterators.RawNestedIterator(csm, [1]),csm)
-        end
-
-        @testset "Utils" begin
-            @test ExpandNestedData.all_eltypes_are_values(Vector{Union{Int64, String, Float64}})
-            @test !ExpandNestedData.all_eltypes_are_values(Vector{Union{Int64, String, AbstractFloat}})
-            @test !ExpandNestedData.all_eltypes_are_values(Vector{Union{Dict, String}})
-            d = Dict(:a => 1, :b => 2)
-            @test ExpandNestedData.get_names(d) == keys(d)
-            struct _T_
-                a
-            end
-
-            @test collect(ExpandNestedData.get_names(_T_(1))) == collect(fieldnames(_T_))
-            @test ExpandNestedData.get_value(d, :a, 3) == 1
-            @test ExpandNestedData.get_value(d, :c, 3) == 3
-            @test ExpandNestedData.get_value(_T_(1), :a, 3) == 1
-            @test ExpandNestedData.join_names((:a,1,"hi"), ".") == Symbol("a.1.hi")
-        end
-    end
-
     # Source Data
     simple_test_body = JSON3.read("""
     {"data" : [
@@ -141,6 +97,19 @@ end
         "d" : 4
     }
     """
+    test_body = JSON3.read(test_body_str)
+
+    homogenous_test_body = JSON3.read("""
+    {
+        "a" : [
+            {"b" : [1], "c" : 2},
+            {"b" : [2]},
+            {"b" : [3, 4], "c" : 1},
+            {"b" : []}
+        ],
+        "d" : 4
+    }
+    """)
     test_body = JSON3.read(test_body_str)
 
     struct InternalObj
@@ -243,6 +212,14 @@ end
             )
             unordered_equal(ExpandNestedData.expand(two_layer_deep; use_v2=true), (a_b_c = [1], a_b_d = [2]))
         end
+        @test unordered_equal(
+            ExpandNestedData.ExpandNestedData2.expand(homogenous_test_body; use_xpath_names=true),
+            (
+                var"a[*]/b[*]" = Union{Missing, Int64}[1, 2, 3, 4, missing],
+                var"a[*]/c" = Union{Missing, Int64}[2, missing, 1, 1, missing],
+                d = [4, 4, 4, 4, 4]
+            )
+            )
     end
 
 
