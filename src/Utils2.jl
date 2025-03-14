@@ -24,7 +24,24 @@ is_datatype(x::TypeKind) = x == DATATYPE
 
 
 @enum ColumnStyle flat_columns nested_columns
-@enum PoolArrayOptions NEVER ALWAYS AUTO
+@enum MaybeBool TRUE FALSE MAYBE
+function Base.convert(::Type{MaybeBool}, x::Bool)
+    return if x
+        TRUE
+    else
+        FALSE
+    end
+end
+function maybe_and(a, b)
+    if a == b
+        return a
+    elseif a == MAYBE
+        return b
+    elseif b == MAYBE
+        return a
+    end
+    error("Cannot combine $a and $b")
+end
 
 struct CustomMissingValue end
 const MISSING = CustomMissingValue()

@@ -16,22 +16,31 @@ include("NamePath2.jl")
 include("ColumnDefinitions2.jl")
 include("PathGraph2.jl")
 
+@kwdef struct Configuration
+    default_value
+    pool_arrays::MaybeBool
+    name_join_pattern::String
+    lazy_columns::Bool
+    track_array_path::Bool
+end
 
 function expand(
 	data,
 	column_definitions = nothing;
 	default_value = missing,
-	pool_arrays = false,
+	pool_arrays = FALSE,
 	name_join_pattern = "_",
 	column_style = :flat,
 	lazy_columns = false,
 	column_names = (),
+    track_array_path = false
 )
+    config = Configuration(; default_value, pool_arrays, name_join_pattern, lazy_columns, track_array_path)
 
 	path_graph = make_path_graph(column_definitions; default_value, pool_arrays, name_join_pattern)
-	col_set = _expand(data, NamePath(), default_value, path_graph)
+	col_set = _expand(data, NamePath(), path_graph; config)
 
-	pool_arrays = pool_arrays ? AUTO : NEVER
+	pool_arrays = pool_arrays ? MAYBE : FALSE
 
 	if column_style == :flat
 
@@ -90,7 +99,7 @@ function get_flattened_name_column_pair(
 	return name => data
 end
 
-function _expand(@nospecialize(data), name_path, default_value, path_graph)
+function _expand(@nospecialize(data), name_path, path_graph; config)
     T = type_kind(data)
     @cases path_graph begin
         LeafNode(_, column_definition) => return if is_array(T)
@@ -102,65 +111,63 @@ function _expand(@nospecialize(data), name_path, default_value, path_graph)
             return _expand_leaf(data, name_path)
         end
         _ => if is_value(T)
-            return _expand_missing_paths(path_graph, name_path)
+            return _expand_missing_paths(path_graph, name_path; config)
         end
     end
 
     if is_dict(T)
-        _expand_dict(data, name_path, default_value, path_graph)
+        _expand_dict(data, name_path, path_graph; config)
     elseif is_array(T)
-        _expand_array(data, name_path, default_value, path_graph)
+        _expand_array(data, name_path, path_graph; config)
     elseif is_datatype(T)
-        _expand_data_type(data, name_path, default_value, path_graph)
+        _expand_data_type(data, name_path, path_graph; config)
     end
 end
 
-function _expand_missing_paths(path_graph::PathNode, name_path::NamePath)
+function _expand_missing_paths(path_graph::PathNode, name_path::NamePath; config)
     @cases path_graph begin
-        TopLevelNode(children) => mapreduce(
-            _expand_missing_paths,
-            vcat,
-            get_children(path_graph),
-            repeated(name_path)
-        )
-        BranchNode(name, children) => mapreduce(
-            _expand_missing_paths,
-            vcat,
-            get_children(path_graph),
-            repeated(append(name_path, name))
-        )
+        TopLevelNode(children) => begin
+            mapreduce(
+                child -> _expand_missing_paths(child, name_path; config),
+                vcat,
+                get_children(path_graph)
+            )
+        end
+        BranchNode(name, children) => begin
+            name_path = append(name_path, name; is_array = false)
+            mapreduce(
+                child -> _expand_missing_paths(child, name_path; config),
+                vcat,
+                get_children(path_graph)
+            )
+        end
         LeafNode(name, column_definition) => new_column_set(
-            append(name_path, name), column_definition.default_value)
+            append(name_path, name; is_array = false), column_definition.default_value)
         NothingNode() => error("Tried to expand missing paths with a NothingNode")
     end
 end
 
-function _expand_dict(@nospecialize(data), name_path::NamePath, default_value, path_graph)
+function _expand_dict(@nospecialize(data), name_path::NamePath, path_graph; config)
 	return _expand_name_value_container(
 		data,
 		keys(data),
 		getindex,
         haskey,
 		name_path,
-		default_value,
-		path_graph,
+		path_graph;
+        config
 	)
 end
 
-function _expand_data_type(
-	@nospecialize(data),
-	name_path::NamePath,
-	default_value,
-	path_graph
-)
+function _expand_data_type(@nospecialize(data), name_path::NamePath, path_graph; config)
 	return _expand_name_value_container(
 		data,
 		propertynames(data),
 		getproperty,
         hasproperty,
 		name_path,
-		default_value,
-		path_graph,
+		path_graph;
+        config
 	)
 end
 
@@ -170,10 +177,10 @@ function _expand_name_value_container(
 	getter,
     checker,
 	name_path::NamePath,
-	default_value,
-	path_graph,
+	path_graph;
+    config
 )
-	if length(names) == 0
+	if isempty(names)
 		return Column[]
 	end
 
@@ -189,8 +196,8 @@ function _expand_name_value_container(
             getter,
             checker,
             name_path,
-            default_value,
-            path_graph
+            path_graph;
+            config
         )
 		for name in required_names
 	]
@@ -203,28 +210,23 @@ function _expand_value(
     getter,
     checker,
     name_path::NamePath,
-    default_value,
-    path_graph
+    path_graph;
+    config
 )
-    child_path_name = append(name_path, name)
+    child_path_name = append(name_path, name; is_array = false)
     # case when we have no path_path graph is simplest
     @cases path_graph begin
-        NothingNode => return _expand(getter(data, name), child_path_name, default_value, path_graph)
+        NothingNode => return _expand(getter(data, name), child_path_name, path_graph; config)
         _ => nothing
     end
 
     child_path_graph = get_child_by_name(path_graph, name)
     # If we have a path graph and data, the case is also simple
     if checker(data, name)
-        return _expand(
-            getter(data, name),
-            child_path_name,
-            default_value,
-            child_path_graph
-            )
+        return _expand(getter(data, name), child_path_name, child_path_graph; config)
     end
     # If we are missing the requested name, then we expand missing
-    return _expand_missing_paths(child_path_graph, name_path)
+    return _expand_missing_paths(child_path_graph, name_path; config)
 end
 
 function merge_columns!(list_of_column_sets)
@@ -248,62 +250,42 @@ function merge_columns!(column_set1, column_set2)
 	return column_set1
 end
 
-function cycle_column(column, n)
-	return Column(column.name, cycle(column.data, n))
-end
 
-function Base.vcat(columns::Column...)
-	allequal(c.name for c in columns) ||
-		throw(ArgumentError("columns must have the same name"))
-	return Column(columns[1].name, concat((c.data for c in columns)...))
-end
-
-function _expand_array(@nospecialize(data), name_path, default_value, path_graph)
+function _expand_array(@nospecialize(data), name_path, path_graph; config)
+    name_path = mark_last_as_array(name_path)
 	element_count = length(data)
 
 	if element_count == 0
-		return new_column_set(name_path, default_value)
+		return new_column_set(name_path, config.default_value)
 	elseif element_count == 1
-		return _expand(only(data), name_path, default_value, path_graph)
+		return _expand(only(data), name_path, path_graph; config)
 	end
 
 	container_count = sum(is_container, data)
 
 	# No containers at all
 	if container_count == 0
-		return Column[Column(name_path, seed_vector(data, default_value))]
+		return Column[Column(name_path, seed_vector(data, config.default_value))]
 	end
 
 	containers = ifilter(is_container, data)
-	expanded = imap(_expand, containers, repeated(name_path), repeated(default_value), repeated(path_graph))
+	expanded = imap(
+        (args...) -> _expand(args...;config=config),
+        containers, repeated(name_path), repeated(path_graph)
+        )
 	no_empties = collect(ifilter(!isempty, expanded))
-	all_names = Set(flatmap(c -> (x.name for x in c), no_empties))
+	all_names = unique(flatmap(c -> (x.name for x in c), no_empties))
 	stacked_columns =
-		Column[stack_columns(no_empties, name, default_value) for name in all_names]
+		Column[stack_columns(no_empties, name; config) for name in all_names]
 
 	if container_count != element_count
 		loose_values = filter(!is_container, data)
-		loose_columns = Column[Column(name_path, seed_vector(loose_values, default_value))]
+		loose_columns = Column[Column(name_path, seed_vector(loose_values, config.default_value))]
 		return merge_columns!((loose_columns, stacked_columns))
 	end
 	return stacked_columns
 end
 
-function stack_columns(column_sets, name, default_value)
-	data = concat(map(c -> get_column(c, name, default_value).data, column_sets))
-	Column(name, data)
-end
-
-
-
-function get_column(column_set, name_path, default_value)
-	len = length(column_set[1])
-	i = findfirst(c -> c.name == name_path, column_set)
-	if isnothing(i)
-		return cycle_column(Column(name_path, seed(default_value)), len)
-	end
-	return column_set[i]
-end
 
 function _expand_leaf(@nospecialize(data), name_path::NamePath)
 	return new_column_set(name_path, data)
@@ -330,7 +312,7 @@ function table_from_children(column_set, path_graph, name_path)
 	return FlexTable(;
 		(
 			Symbol(string(get_name(child))) =>
-				make_nested_table(column_set, child, append(name_path, get_name(child))) for
+				make_nested_table(column_set, child, append(name_path, get_name(child); is_array = false)) for
 			child in children
 		)...,
 	)

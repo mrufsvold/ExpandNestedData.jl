@@ -56,15 +56,12 @@ function get_default_value(node::PathNode)
         [BranchNode, TopLevelNode] => error("Can't access default value for non-leaf node")
     end
 end
+
 function get_pool_arrays(node::PathNode)
     return @cases node begin
         LeafNode(_, column_definition) => column_definition.pool_arrays
         [BranchNode, TopLevelNode, NothingNode] => error("Can't access pool array attribute for non-leaf node")
     end
-end
-
-function get_pool_arrays(::Any)
-    return AUTO
 end
 
 function get_column_definitions(node::PathNode)

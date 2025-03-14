@@ -45,7 +45,7 @@ end
 Base.size(ic::IterCapture) = (length(ic),)
 seed(data::T) where T = IterCapture'.Seed{T}(data)
 function seed_vector(@nospecialize(data), default_value)
-    if length(data) == 0
+    if isempty(data)
         return seed(default_value)
     elseif length(data) == 1
         return seed(only(data))
