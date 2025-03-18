@@ -1,5 +1,4 @@
 module ExpandNestedData
-using Accessors: @set
 using AutoHashEquals: @auto_hash_equals
 using SumTypes: @sum_type, @cases
 using StructTypes: StructTypes
@@ -23,6 +22,11 @@ include("PathGraph.jl")
     use_xpath_names::Bool
 end
 
+"""
+    expand(data[, column_definitions]; kwargs...)
+
+
+"""
 function expand(
 	data,
 	column_definitions = nothing;
@@ -56,8 +60,7 @@ function expand(
             for c in col_set
 		)
 
-		# TODO make this a FlexTable before 2.0
-		return (; final_pairs...)
+		return FlexTable(; final_pairs...)
 	end
 
     final_path_graph = @cases path_graph begin

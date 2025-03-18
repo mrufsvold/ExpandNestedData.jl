@@ -2,6 +2,7 @@ using Test
 using JSON3
 using ExpandNestedData
 using TypedTables
+using Tables
 
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
@@ -34,19 +35,12 @@ function fieldsequal(o1::NamedTuple, o2::NamedTuple)
     return true
 end
 
-function get_rows(t, fields, len)
-    return [
-        Dict(
-            f => t[f][i]
-            for f in fields
-        )
-        for i in 1:len
-    ]
-end
+
 function unordered_equal(t1, t2)
-    fields = keys(t1)
+    fields = propertynames(t1)
     len = length(t1[1])
-    matches = Set(get_rows(t1, fields,len)) == Set(get_rows(t2, fields,len))
+    t2 = getproperties(t2, fields)
+    matches = Set(Tables.rows(t1)) == Set(Tables.rows(t2))
     if !matches
         @show t1 t2
     end
@@ -77,7 +71,7 @@ end
         {"E" : 7, "D" : 1},
         {"E" : 8, "D" : 2}
     ]}""")
-    expected_simple_table = (data_E=[7,8], data_D=[1,2])
+    expected_simple_table = FlexTable(data_E=[7,8], data_D=[1,2])
 
     test_body_str = """
     {
@@ -130,7 +124,7 @@ end
         # Expanding Arrays
         @test begin
             actual_expanded_table = ExpandNestedData.expand(test_body;)
-            expected_table_expanded = (
+            expected_table_expanded = FlexTable(
                 a_b=[1,2,3,4,missing],
                 a_c=[2,missing,1,1, missing],
                 d=[4,4,4,4,4])
@@ -143,7 +137,7 @@ end
                 :arr1 => [1,2,3],
                 :arr2 => [4,5]
             )
-            output = (
+            output = FlexTable(
                 arr1 = [1,1,2,2,3,3],
                 arr2 = [4,5,4,5,4,5]
             )
@@ -158,7 +152,7 @@ end
                 Dict(:a=>3),
                 Dict(:a=>4, :b =>5),
             ]
-            output = (
+            output = FlexTable(
                 a = [1,2,3,4],
                 b = [missing,missing,missing,5]
             )
@@ -167,7 +161,7 @@ end
 
         # Using struct of struct as input
         @test begin
-            expected_table_expanded = (
+            expected_table_expanded = FlexTable(
                 new_column=[1,2,3,4,nothing],
                 a_c=[2,nothing,1,1, nothing],
                 d=[4,4,4,4,4])
@@ -183,14 +177,14 @@ end
 
         @test unordered_equal(
             ExpandNestedData.expand(heterogenous_level_test_body;),
-            (data = [5], data_E = [8])
+            FlexTable(data = [5], data_E = [8])
             )
 
         empty_dict_field = Dict(
             :a => Dict(),
             :b => 5
         )
-        @test unordered_equal(ExpandNestedData.expand(empty_dict_field;), (b = [5],))
+        @test unordered_equal(ExpandNestedData.expand(empty_dict_field;), FlexTable(b = [5],))
 
         @test begin
             two_layer_deep = Dict(
@@ -201,11 +195,11 @@ end
                     )
                 )
             )
-            unordered_equal(ExpandNestedData.expand(two_layer_deep;), (a_b_c = [1], a_b_d = [2]))
+            unordered_equal(ExpandNestedData.expand(two_layer_deep;), FlexTable(a_b_c = [1], a_b_d = [2]))
         end
         @test unordered_equal(
             ExpandNestedData.expand(homogenous_test_body; use_xpath_names=true),
-            (
+            FlexTable(
                 var"a[*]/b[*]" = Union{Missing, Int64}[1, 2, 3, 4, missing],
                 var"a[*]/c" = Union{Missing, Int64}[2, missing, 1, 1, missing],
                 d = [4, 4, 4, 4, 4]
@@ -221,10 +215,12 @@ end
             ExpandNestedData.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
             ExpandNestedData.ColumnDefinition((:e, :f); default_value="Missing branch")
             ]
-        expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing],
-            :e_f => repeat(["Missing branch"], 5))
-        )
-        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs;), expected_table)
+        expected_table = FlexTable(
+            d=[4,4,4,4,4],
+            a_b=[1,2,3,4, missing],
+            var"a?_#c"=[2,missing,1,1, missing],
+            e_f = repeat(["Missing branch"], 5)
+            )
         @test fieldsequal(
             ExpandNestedData.expand(test_body, columns_defs; column_style=:nested,) |> rows |> first,
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
@@ -240,10 +236,11 @@ end
         # Expanding Arrays
         actual_expanded_table = ExpandNestedData.expand(test_body; name_join_pattern = "?_#",)
         @test begin
-            expected_table_expanded = NamedTuple((
-                Symbol("a?_#b")=>[1,2,3,4,missing],
-                Symbol("a?_#c")=>[2,missing,1,1, missing],
-                :d=>[4,4,4,4,4]))
+            expected_table_expanded = FlexTable(
+                var"a?_#b"=[1,2,3,4,missing],
+                var"a?_#c"=[2,missing,1,1, missing],
+                d=[4,4,4,4,4]
+                )
             unordered_equal(actual_expanded_table, expected_table_expanded)
         end
     end
