@@ -50,6 +50,9 @@ end
 struct CustomMissingValue end
 const MISSING = CustomMissingValue()
 
+struct EmptyDict end
+Base.get(::EmptyDict, key, default) = default
+
 macro get(dict, key, default)
     quote
         let v = get($(esc(dict)), $(esc(key)), $MISSING)

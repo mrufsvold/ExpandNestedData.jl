@@ -162,11 +162,11 @@ end
         # Using struct of struct as input
         @test begin
             expected_table_expanded = FlexTable(
-                new_column=[1,2,3,4,nothing],
+                a_b=[1,2,3,4,nothing],
                 a_c=[2,nothing,1,1, nothing],
                 d=[4,4,4,4,4])
             unordered_equal(
-                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column),),
+                ExpandNestedData.expand(struct_body; default_value=nothing),
                 expected_table_expanded)
         end
 

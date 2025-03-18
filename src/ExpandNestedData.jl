@@ -46,7 +46,6 @@ function expand(
 	name_join_pattern = "_",
 	column_style = :flat,
 	lazy_columns = false,
-	column_names = (),
     use_xpath_names = false
 )
     config = Configuration(; default_value, name_join_pattern, lazy_columns, use_xpath_names)
@@ -57,10 +56,7 @@ function expand(
 
 	if column_style == :flat
 		column_name_lookup = @cases path_graph begin
-            NothingNode => Dict(
-                NamePath(parts...) => replacement
-                for (parts, replacement) in column_names
-            )
+            NothingNode => EmptyDict()
             _ => Dict(
                 column_definition.name_path => column_definition.column_name
                 for column_definition in get_column_definitions(path_graph)
