@@ -1,1 +1,1 @@
-public expand
+public expand, ColumnDefinition

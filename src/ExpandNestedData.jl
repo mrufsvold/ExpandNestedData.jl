@@ -23,9 +23,21 @@ include("PathGraph.jl")
 end
 
 """
-    expand(data[, column_definitions]; kwargs...)
+    expand(data[, column_definitions::AbstractArray{ColumnDefinition}]; kwargs...)::TypedTables.FlexTable
 
+Expand nested data structure, `data`, into a `TypedTables.FlexTable`. If `column_definitions`
+is provided, only the paths defined in `column_definitions` will be expanded.
 
+# Keyword Arguments
+- `default_value::Any`: The default value to use when a path is missing.
+- `name_join_pattern::String`: The pattern to use when joining names.
+- `column_style::Symbol`: The style of the output table. Either `:flat` or `:nested`.
+    When `:flat`, the output table will be a flat table with names joined by `name_join_pattern`.
+    When `:nested`, the output table will be a nested table.
+- `lazy_columns::Bool`: If `true`, columns are returned as a lazy `AbstractArray`. Otherwise,
+    columns are returned as a `Vector`.
+- `use_xpath_names::Bool`: If `true`, the column names will be generated using XPath notation.
+    `name_join_pattern` will be ignored.
 """
 function expand(
 	data,
