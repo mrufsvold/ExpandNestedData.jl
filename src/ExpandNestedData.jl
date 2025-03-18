@@ -1,36 +1,313 @@
 module ExpandNestedData
-using Base: merge!
-using DataStructures
-using DataStructures: Stack, OrderedRobinDict
-using Logging
-using PooledArrays
-using StructTypes
-using SumTypes
-using TypedTables: Table
+using Accessors: @set
+using AutoHashEquals: @auto_hash_equals
+using SumTypes: @sum_type, @cases
+using StructTypes: StructTypes
+using TypedTables: FlexTable
+using Base.Iterators: repeated, flatmap
 
-export expand, ColumnDefinition
-
-"""NameValueContainer is an abstraction on Dict and DataType structs so that we can get their
-contents without worrying about `getkey` or `getproperty`, etc.
-"""
-NameValueContainer = Union{StructTypes.DictType, StructTypes.DataType}
-Container = Union{StructTypes.DictType, StructTypes.DataType, StructTypes.ArrayType}
-struct ExpandMissing end
-
-function get_name end
-function get_id end
+if VERSION >= v"1.11.0"
+    include("public.jl")
+end
 
 include("Utils.jl")
-include("NameLists.jl")
-include("NestedIterators.jl")
-include("ColumnSetManager.jl")
+include("IterCapture.jl")
+include("NamePath.jl")
 include("ColumnDefinitions.jl")
-import .ColumnDefinitions: ColumnDefinition
 include("PathGraph.jl")
-include("ExpandedTable.jl")
-include("CoreHelpers.jl")
-include("ExpandNestedData2.jl")
-# Here is where the main logic starts
-include("Core.jl")
 
+@kwdef struct Configuration
+    default_value
+    name_join_pattern::String
+    lazy_columns::Bool
+    use_xpath_names::Bool
 end
+
+function expand(
+	data,
+	column_definitions = nothing;
+	default_value = missing,
+	name_join_pattern = "_",
+	column_style = :flat,
+	lazy_columns = false,
+	column_names = (),
+    use_xpath_names = false
+)
+    config = Configuration(; default_value, name_join_pattern, lazy_columns, use_xpath_names)
+
+	path_graph = make_path_graph(column_definitions; default_value, name_join_pattern)
+	col_set = _expand(data, NamePath(), path_graph; config)
+
+
+	if column_style == :flat
+		column_name_lookup = @cases path_graph begin
+            NothingNode => Dict(
+                NamePath(parts...) => replacement
+                for (parts, replacement) in column_names
+            )
+            _ => Dict(
+                column_definition.name_path => column_definition.column_name
+                for column_definition in get_column_definitions(path_graph)
+            )
+        end
+
+		final_pairs = (
+			get_flattened_name_column_pair(c, column_name_lookup; config)
+            for c in col_set
+		)
+
+		# TODO make this a FlexTable before 2.0
+		return (; final_pairs...)
+	end
+
+    final_path_graph = @cases path_graph begin
+        NothingNode => begin
+            name_paths = get_name_path.(col_set)
+            path_graph = make_path_graph(name_paths)
+        end
+        _ => path_graph
+    end
+	make_nested_table(col_set, final_path_graph)
+end
+
+function get_flattened_name_column_pair(
+	column,
+	column_name_lookup;
+	config
+)
+    name = if config.use_xpath_names
+        xpath(column.name)
+    else
+        @get(
+            column_name_lookup,
+            column.name,
+            join_name_path(column.name, config.name_join_pattern)
+        )
+    end
+	data = if config.lazy_columns
+		column.data
+	else
+		collect(column)
+	end
+	return name => data
+end
+
+function _expand(@nospecialize(data), name_path, path_graph; config)
+    T = type_kind(data)
+    @cases path_graph begin
+        LeafNode(_, column_definition) => return if is_array(T)
+            new_column_set_from_vec(name_path, data, column_definition.default_value)
+        else
+            _expand_leaf(data, name_path)
+        end
+        NothingNode => if is_value(T)
+            return _expand_leaf(data, name_path)
+        end
+        _ => if is_value(T)
+            return _expand_missing_paths(path_graph, name_path; config)
+        end
+    end
+
+    if is_dict(T)
+        _expand_dict(data, name_path, path_graph; config)
+    elseif is_array(T)
+        _expand_array(data, name_path, path_graph; config)
+    elseif is_datatype(T)
+        _expand_data_type(data, name_path, path_graph; config)
+    end
+end
+
+function _expand_missing_paths(path_graph::PathNode, name_path::NamePath; config)
+    @cases path_graph begin
+        TopLevelNode(children) => begin
+            mapreduce(
+                child -> _expand_missing_paths(child, name_path; config),
+                vcat,
+                get_children(path_graph)
+            )
+        end
+        BranchNode(name, children) => begin
+            name_path = append(name_path, name; is_array = false)
+            mapreduce(
+                child -> _expand_missing_paths(child, name_path; config),
+                vcat,
+                get_children(path_graph)
+            )
+        end
+        LeafNode(name, column_definition) => new_column_set(
+            append(name_path, name; is_array = false), column_definition.default_value)
+        NothingNode() => error("Tried to expand missing paths with a NothingNode")
+    end
+end
+
+function _expand_dict(@nospecialize(data), name_path::NamePath, path_graph; config)
+	return _expand_name_value_container(
+		data,
+		keys(data),
+		getindex,
+        haskey,
+		name_path,
+		path_graph;
+        config
+	)
+end
+
+function _expand_data_type(@nospecialize(data), name_path::NamePath, path_graph; config)
+	return _expand_name_value_container(
+		data,
+		propertynames(data),
+		getproperty,
+        hasproperty,
+		name_path,
+		path_graph;
+        config
+	)
+end
+
+function _expand_name_value_container(
+	@nospecialize(data),
+	@nospecialize(names),
+	getter,
+    checker,
+	name_path::NamePath,
+	path_graph;
+    config
+)
+	if isempty(names)
+		return Column[]
+	end
+
+    required_names = @cases path_graph begin
+        NothingNode => names
+        _ => get_name.(get_children(path_graph))
+    end
+
+	list_of_column_sets = Vector{Column}[
+        _expand_value(
+            data,
+            name,
+            getter,
+            checker,
+            name_path,
+            path_graph;
+            config
+        )
+		for name in required_names
+	]
+	return merge_columns!(list_of_column_sets)
+end
+
+function _expand_value(
+    @nospecialize(data),
+    @nospecialize(name),
+    getter,
+    checker,
+    name_path::NamePath,
+    path_graph;
+    config
+)
+    child_path_name = append(name_path, name; is_array = false)
+    # case when we have no path_path graph is simplest
+    @cases path_graph begin
+        NothingNode => return _expand(getter(data, name), child_path_name, path_graph; config)
+        _ => nothing
+    end
+
+    child_path_graph = get_child_by_name(path_graph, name)
+    # If we have a path graph and data, the case is also simple
+    if checker(data, name)
+        return _expand(getter(data, name), child_path_name, child_path_graph; config)
+    end
+    # If we are missing the requested name, then we expand missing
+    return _expand_missing_paths(child_path_graph, name_path; config)
+end
+
+function merge_columns!(list_of_column_sets)
+	if isempty(list_of_column_sets)
+		return Column[]
+	end
+	column_set = reduce(merge_columns!, list_of_column_sets)
+	multiplier = length(last(column_set))
+	map(c -> cycle_column(c, multiplier ÷ length(c)), column_set)
+end
+function merge_columns!(column_set1, column_set2)
+	if isempty(column_set1)
+		return column_set2
+	elseif isempty(column_set2)
+		return column_set1
+	end
+
+	multiplier = length(last(column_set1))
+	repeated_column_set = map(c -> cycle_column(c, multiplier), column_set2)
+	append!(column_set1, repeated_column_set)
+	return column_set1
+end
+
+
+function _expand_array(@nospecialize(data), name_path, path_graph; config)
+    name_path = mark_last_as_array(name_path)
+	element_count = length(data)
+
+	if element_count == 0
+		return new_column_set(name_path, config.default_value)
+	elseif element_count == 1
+		return _expand(only(data), name_path, path_graph; config)
+	end
+
+	container_count = sum(is_container, data)
+
+	# No containers at all
+	if container_count == 0
+		return Column[Column(name_path, seed_vector(data, config.default_value))]
+	end
+
+	containers = ifilter(is_container, data)
+	expanded = imap(
+        (args...) -> _expand(args...;config=config),
+        containers, repeated(name_path), repeated(path_graph)
+        )
+	no_empties = collect(ifilter(!isempty, expanded))
+	all_names = unique(flatmap(c -> (x.name for x in c), no_empties))
+	stacked_columns =
+		Column[stack_columns(no_empties, name; config) for name in all_names]
+
+	if container_count != element_count
+		loose_values = filter(!is_container, data)
+		loose_columns = Column[Column(name_path, seed_vector(loose_values, config.default_value))]
+		return merge_columns!((loose_columns, stacked_columns))
+	end
+	return stacked_columns
+end
+
+
+function _expand_leaf(@nospecialize(data), name_path::NamePath)
+	return new_column_set(name_path, data)
+end
+
+
+function make_nested_table(
+	column_set,
+	path_graph::PathNode,
+	name_path::NamePath = NamePath(),
+)
+	return @cases path_graph begin
+		[TopLevelNode, BranchNode] => table_from_children(column_set, path_graph, name_path)
+		LeafNode(name, column_definition) => collect(
+			get_column(column_set, name_path, column_definition.default_value)
+		)
+        NothingNode() => error("Tried to create a nested table from a NothingNode")
+	end
+end
+
+function table_from_children(column_set, path_graph, name_path)
+	children = get_children(path_graph)
+	return FlexTable(;
+		(
+			Symbol(string(get_name(child))) =>
+				make_nested_table(column_set, child, append(name_path, get_name(child); is_array = false)) for
+			child in children
+		)...,
+	)
+end
+
+end # END MODULE HERE #

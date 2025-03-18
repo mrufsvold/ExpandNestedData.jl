@@ -1,87 +1,76 @@
-module ColumnDefinitions
-using ..ColumnSetManagers: ColumnSet, unnamed
-import ..join_names
-
-"""ColumnDefinition provides a mechanism for specifying details for extracting data from a nested data source"""
 struct ColumnDefinition
-    # Path to values
-    field_path::Tuple
-    # name of this column in the table once expanded
+    name_path::NamePath
     column_name::Symbol
     default_value
-    pool_arrays::Bool
+    name_join_pattern::String
 end
-# Accessors
-get_field_path(c::ColumnDefinition) = c.field_path
-get_column_name(c::ColumnDefinition) = c.column_name
-get_default_value(c::ColumnDefinition) = c.default_value
-get_pool_arrays(c::ColumnDefinition) = c.pool_arrays
 
-"""
-    ColumnDefinition(field_path; column_name=nothing, flatten_arrays=false, default_value=missing, pool_arrays=false)
-
-## Args
-* `field_path`: Vector or Tuple of keys/fieldnames that constitute a path from the top of the data to the values to extract for the column
-
-## Keyword Args
-* `column_name::Symbol`: A name for the resulting column. If `nothing`, defaults to joining the `field_path` with snake case format.
-* `default_value`: When the field_path keys do not exist on one or more branches, fill with this value. Default: `missing`
-* `pool_arrays::Bool`: When collecting values for this column, choose whether to use `PooledArrays` instead of `Base.Vector`. Default: `false` (use `Vector`)
-* `name_join_pattern::String`: The separator for joining field paths into column names. Default: "_"
-## Returns
-`::ColumnDefinition`
-"""
-function ColumnDefinition(field_path; kwargs...)
-    return ColumnDefinition(tuple(field_path...); kwargs...)
-end
-function ColumnDefinition(field_path::T; column_name=nothing, default_value=missing, pool_arrays=false, name_join_pattern::String = "_") where {T <: Tuple}
-    if column_name isa Nothing
-        path = last(field_path) == unnamed ? field_path[1:end-1] : field_path
-        column_name = join_names(path, name_join_pattern)
+function ColumnDefinition(name_parts; name_join_pattern = "_", column_name=nothing, default_value=missing)
+    name_path = NamePath(name_parts...)
+    if isnothing(column_name)
+        column_name = join_name_path(name_path, name_join_pattern)
     end
-    ColumnDefinition(field_path, column_name, default_value, pool_arrays)
+    return ColumnDefinition(name_path, Symbol(column_name), default_value, name_join_pattern)
 end
-function ColumnDefinition(field_path, column_names::Dict; pool_arrays::Bool, name_join_pattern = "_")
-    column_name = haskey(column_names, field_path) ? column_names[field_path] : nothing
-    ColumnDefinition(field_path; column_name=column_name, pool_arrays=pool_arrays, name_join_pattern = name_join_pattern)
+
+Base.getindex(cd::ColumnDefinition, i) = get_name_path(cd)[i]
+Base.length(cd::ColumnDefinition) = length(get_name_path(cd))
+get_name_path(cd::ColumnDefinition) = cd.name_path
+
+make_path_graph(v::AbstractVector{ColumnDefinition}) = make_path_graph(get_name_path.(v))
+
+
+struct Column
+    name::NamePath
+    data::IterCapture
 end
-function construct_column_definitions(col_set, column_names, pool_arrays, name_join_pattern)
-    paths = keys(col_set)
-    return ColumnDefinition.(paths, Ref(column_names); pool_arrays=pool_arrays, name_join_pattern)
+Base.length(c::Column) = length(c.data)
+Base.eltype(c::Column) = eltype(c.data)
+Base.collect(c::Column) = collect(c.data)
+function get_name_path(c::Column)
+    return c.name
+end
+
+function new_column_set(np::NamePath, @nospecialize(data))
+    Column[Column(np, seed(data))]
+end
+function new_column_set_from_vec(np::NamePath, @nospecialize(data), @nospecialize(default_value))
+    Column[Column(np, seed_vector(data, default_value))]
+end
+
+function concat(columns::Vector{Column}; config)
+    iter_caps = imap(c -> c.data, columns)
+    data = concat(iter_caps)
+    one_name = columns[1].name
+    name_path = if config.use_xpath_names == true
+        NamePath([
+            NamePart(
+                one_name[i],
+                mapreduce(c -> get_is_array(c.name.parts[i]), maybe_and, columns)
+            )
+            for i in eachindex(one_name)
+        ])
+    else
+        one_name
+    end
+    return Column(name_path, data)
 end
 
 
-function current_path_name(c::ColumnDefinition, level::Int64)
-    fp = get_field_path(c)
-    return fp[level]
+function cycle_column(column, n)
+	return Column(column.name, cycle(column.data, n))
 end
 
-"""
-    get_unique_current_names(defs, level)
-Get all unique names for the given depth level for a list of ColumnDefinitions
-"""
-get_unique_current_names(defs::AbstractArray{ColumnDefinition}, level) = unique((current_path_name(def, level) for def in defs))
-
-"""
-    make_column_def_child_copies(column_defs::Vector{ColumnDefinition}, name, level)
-Return a column definitions that have children for the given name at the given level.
-"""
-function make_column_def_child_copies(column_defs::AbstractArray{ColumnDefinition}, name, level::Int64)
-    mask = map(
-        def -> is_current_name(def, name, level) && length(get_field_path(def)) > level,
-        column_defs
-        )
-    return view(column_defs, mask)
+function stack_columns(column_sets, name; config)
+	return concat(map(c -> get_column(c, name, config.default_value), column_sets); config)
 end
-"""
-    is_current_name(column_def::ColumnDefinition, name, level)
-Check if name matches the field path for column_def at level
-"""
-is_current_name(column_def::ColumnDefinition, name, level) = current_path_name(column_def, level) == name
-"""
-    has_more_keys(column_def, level)
-Check if there are more keys in the field path below the given level
-"""
-has_more_keys(column_def, level) = level < length(get_field_path(column_def))
 
-end # ColumnDefinitions
+
+function get_column(column_set, name_path, default_value)
+	len = length(column_set[1])
+	i = findfirst(c -> c.name == name_path, column_set)
+	if isnothing(i)
+		return cycle_column(Column(name_path, seed(default_value)), len)
+	end
+	return column_set[i]
+end

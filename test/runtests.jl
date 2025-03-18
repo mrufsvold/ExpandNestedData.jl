@@ -1,14 +1,7 @@
-using PooledArrays
 using Test
 using JSON3
 using ExpandNestedData
-import ExpandNestedData: NestedIterators,
-                        ColumnSetManagers,
-                        NameLists,
-                        PathGraph,
-                        ColumnDefinitions
 using TypedTables
-using DataStructures: OrderedRobinDict
 
 fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
 fieldequal(::Nothing, ::Nothing) = true
@@ -130,13 +123,13 @@ end
             )
 
     @testset "Unguided Expand" begin
-        actual_simple_table = ExpandNestedData.expand(simple_test_body; use_v2=true)
+        actual_simple_table = ExpandNestedData.expand(simple_test_body;)
         @test unordered_equal(actual_simple_table, expected_simple_table)
         @test eltype(actual_simple_table.data_D) == Int64
 
         # Expanding Arrays
         @test begin
-            actual_expanded_table = ExpandNestedData.expand(test_body; use_v2=true)
+            actual_expanded_table = ExpandNestedData.expand(test_body;)
             expected_table_expanded = (
                 a_b=[1,2,3,4,missing],
                 a_c=[2,missing,1,1, missing],
@@ -154,7 +147,7 @@ end
                 arr1 = [1,1,2,2,3,3],
                 arr2 = [4,5,4,5,4,5]
             )
-            unordered_equal(ExpandNestedData.expand(input; use_v2=true), output)
+            unordered_equal(ExpandNestedData.expand(input;), output)
         end
 
         # Test multiple missing columns in array
@@ -169,7 +162,7 @@ end
                 a = [1,2,3,4],
                 b = [missing,missing,missing,5]
             )
-            unordered_equal(ExpandNestedData.expand(input; use_v2=true), output)
+            unordered_equal(ExpandNestedData.expand(input;), output)
         end
 
         # Using struct of struct as input
@@ -179,19 +172,17 @@ end
                 a_c=[2,nothing,1,1, nothing],
                 d=[4,4,4,4,4])
             unordered_equal(
-                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column), use_v2=true),
+                ExpandNestedData.expand(struct_body; default_value=nothing, column_names= Dict((:a, :b) => :new_column),),
                 expected_table_expanded)
         end
-        @test (typeof(ExpandNestedData.expand(struct_body; pool_arrays=true, lazy_columns=false, use_v2=true).d) ==
-            typeof(PooledArray(Int64[])))
 
         @test fieldsequal(
-            (ExpandNestedData.expand(struct_body; column_style=:nested, use_v2=true) |> rows |> first),
+            (ExpandNestedData.expand(struct_body; column_style=:nested,) |> rows |> first),
             (a=(b=1,c=2), d=4)
             )
 
         @test unordered_equal(
-            ExpandNestedData.expand(heterogenous_level_test_body; use_v2=true),
+            ExpandNestedData.expand(heterogenous_level_test_body;),
             (data = [5], data_E = [8])
             )
 
@@ -199,7 +190,7 @@ end
             :a => Dict(),
             :b => 5
         )
-        @test unordered_equal(ExpandNestedData.expand(empty_dict_field; use_v2=true), (b = [5],))
+        @test unordered_equal(ExpandNestedData.expand(empty_dict_field;), (b = [5],))
 
         @test begin
             two_layer_deep = Dict(
@@ -210,10 +201,10 @@ end
                     )
                 )
             )
-            unordered_equal(ExpandNestedData.expand(two_layer_deep; use_v2=true), (a_b_c = [1], a_b_d = [2]))
+            unordered_equal(ExpandNestedData.expand(two_layer_deep;), (a_b_c = [1], a_b_d = [2]))
         end
         @test unordered_equal(
-            ExpandNestedData.ExpandNestedData2.expand(homogenous_test_body; use_xpath_names=true),
+            ExpandNestedData.expand(homogenous_test_body; use_xpath_names=true),
             (
                 var"a[*]/b[*]" = Union{Missing, Int64}[1, 2, 3, 4, missing],
                 var"a[*]/c" = Union{Missing, Int64}[2, missing, 1, 1, missing],
@@ -225,29 +216,29 @@ end
 
     @testset "Configured Expand" begin
         columns_defs = [
-            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:d,)),
-            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:a, :b)),
-            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
-            ExpandNestedData.ExpandNestedData2.ColumnDefinition((:e, :f); default_value="Missing branch")
+            ExpandNestedData.ColumnDefinition((:d,)),
+            ExpandNestedData.ColumnDefinition((:a, :b)),
+            ExpandNestedData.ColumnDefinition((:a, :c); name_join_pattern = "?_#"),
+            ExpandNestedData.ColumnDefinition((:e, :f); default_value="Missing branch")
             ]
         expected_table = NamedTuple((:d=>[4,4,4,4,4], :a_b=>[1,2,3,4, missing], Symbol("a?_#c")=>[2,missing,1,1, missing],
             :e_f => repeat(["Missing branch"], 5))
         )
-        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs; use_v2=true), expected_table)
+        @test unordered_equal(ExpandNestedData.expand(test_body, columns_defs;), expected_table)
         @test fieldsequal(
-            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested, use_v2=true) |> rows |> first,
+            ExpandNestedData.expand(test_body, columns_defs; column_style=:nested,) |> rows |> first,
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
         # columns_defs = [
-        #     ExpandNestedData.ExpandNestedData2.ColumnDefinition((:data,)),
-        #     ExpandNestedData.ExpandNestedData2.ColumnDefinition((:data, :E))
+        #     ExpandNestedData.ColumnDefinition((:data,)),
+        #     ExpandNestedData.ColumnDefinition((:data, :E))
         # ]
-        # @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs; use_v2=true), (data = [5], data_E = [8]))
+        # @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs;), (data = [5], data_E = [8]))
     end
 
     @testset "superficial options" begin
         # Expanding Arrays
-        actual_expanded_table = ExpandNestedData.expand(test_body; name_join_pattern = "?_#", use_v2=true)
+        actual_expanded_table = ExpandNestedData.expand(test_body; name_join_pattern = "?_#",)
         @test begin
             expected_table_expanded = NamedTuple((
                 Symbol("a?_#b")=>[1,2,3,4,missing],
