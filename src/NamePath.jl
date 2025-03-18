@@ -2,10 +2,11 @@
     name
     is_array::MaybeBool
 end
-function NamePart(;name, is_array)
-    if name isa NamePart
-        name = name.name
-    end
+function NamePart(name::NamePart; is_array = MAYBE)
+    is_array = is_array == MAYBE ? name.is_array : is_array
+    return NamePart(name.name, is_array)
+end
+function NamePart(name; is_array = MAYBE)
     return NamePart(name, is_array)
 end
 get_is_array(np::NamePart) = np.is_array
@@ -22,18 +23,17 @@ end
 @auto_hash_equals struct NamePath
     parts::Vector{NamePart}
     NamePath(v::Vector{NamePart}) = new(v)
-    NamePath(parts...) = new([NamePart(;name, is_array=false) for name in parts])
+    NamePath(parts...) = new([NamePart(name; is_array=false) for name in parts])
 end
 
 function append(np::NamePath, @nospecialize(name); is_array)
     new_parts = copy(np.parts)
-    push!(new_parts, NamePart(;name, is_array))
+    push!(new_parts, NamePart(name; is_array))
     return NamePath(new_parts)
 end
 
 function mark_n_as_array(np::NamePath, n::Int)
-    new_parts = copy(np.parts)
-    new_parts[n] = NamePart(;name = new_parts[n], is_array = TRUE)
+    new_parts = NamePart.(np.parts; is_array = TRUE)
     return NamePath(new_parts)
 end
 function mark_last_as_array(np::NamePath)

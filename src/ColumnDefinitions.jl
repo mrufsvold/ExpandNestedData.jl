@@ -42,7 +42,7 @@ function concat(columns::Vector{Column}; config)
     iter_caps = imap(c -> c.data, columns)
     data = concat(iter_caps)
     one_name = columns[1].name
-    name_path = if config.use_xpath_names == true
+    name_path = if config.use_xpath_names
         NamePath([
             NamePart(
                 one_name[i],
