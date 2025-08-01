@@ -71,6 +71,7 @@ function get_column_definitions(node::PathNode)
 end
 
 function make_path_graph(name_paths; kwargs...)
+    check_for_overlaps(name_paths)
     children = get_node_children(name_paths, 1; kwargs...)
     return PathNode'.TopLevelNode(children)
 end
