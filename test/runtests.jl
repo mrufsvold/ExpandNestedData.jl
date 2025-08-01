@@ -4,30 +4,30 @@ using ExpandNestedData
 using TypedTables
 using Tables
 
-fieldequal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
-fieldequal(::Nothing, ::Nothing) = true
-fieldequal(::Missing, ::Missing) = true
-fieldequal(a1::AbstractArray, a2::AbstractArray) = length(a1) == length(a2) && fieldequal.(a1,a2) |> all
-function fieldsequal(o1, o2)
+field_equal(v1, v2) = (v1==v2) isa Bool ? v1==v2 : false
+field_equal(::Nothing, ::Nothing) = true
+field_equal(::Missing, ::Missing) = true
+field_equal(a1::AbstractArray, a2::AbstractArray) = length(a1) == length(a2) && field_equal.(a1,a2) |> all
+function fields_equal(o1, o2)
     for name in fieldnames(typeof(o1))
         prop1 = getproperty(o1, name)
         prop2 = getproperty(o2, name)
-        if !fieldequal(prop1, prop2)
+        if !field_equal(prop1, prop2)
             println("Didn't match on $name. Got $prop1 and $prop2")
             return false
         end
     end
     return true
 end
-function fieldsequal(o1::NamedTuple, o2::NamedTuple)
+function fields_equal(o1::NamedTuple, o2::NamedTuple)
     for name in keys(o1)
         prop1 = getindex(o1, name)
         prop2 = getindex(o2, name)
 
         if prop1 isa NamedTuple && prop2 isa NamedTuple
-            return fieldsequal(prop1, prop2)
+            return fields_equal(prop1, prop2)
         end
-        if !fieldequal(prop1, prop2)
+        if !field_equal(prop1, prop2)
             println("Didn't match on $name. Got $prop1 and $prop2")
             return false
         end
@@ -170,7 +170,7 @@ end
                 expected_table_expanded)
         end
 
-        @test fieldsequal(
+        @test fields_equal(
             (ExpandNestedData.expand(struct_body; column_style=:nested,) |> rows |> first),
             (a=(b=1,c=2), d=4)
             )
@@ -221,15 +221,15 @@ end
             var"a?_#c"=[2,missing,1,1, missing],
             e_f = repeat(["Missing branch"], 5)
             )
-        @test fieldsequal(
+        @test fields_equal(
             ExpandNestedData.expand(test_body, columns_defs; column_style=:nested,) |> rows |> first,
             (d=4, a=(b = 1, c = 2), e = (f="Missing branch",))
         )
-        # columns_defs = [
-        #     ExpandNestedData.ColumnDefinition((:data,)),
-        #     ExpandNestedData.ColumnDefinition((:data, :E))
-        # ]
-        # @test unordered_equal(ExpandNestedData.expand(heterogenous_level_test_body, columns_defs;), (data = [5], data_E = [8]))
+        columns_defs = [
+            ExpandNestedData.ColumnDefinition((:data,)),
+            ExpandNestedData.ColumnDefinition((:data, :E))
+        ]
+        @test_throws ArgumentError ExpandNestedData.expand(heterogenous_level_test_body, columns_defs)
     end
 
     @testset "superficial options" begin

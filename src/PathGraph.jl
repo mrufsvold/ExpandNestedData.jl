@@ -90,4 +90,22 @@ function get_child_node(parent_paths, name, previous_level; kwargs...)
     return Node(name, children)
 end
 
+function check_for_overlaps(name_paths)
+    for ((i1, np1), (i2, np2)) in Iterators.product(enumerate(name_paths), enumerate(name_paths))
+        if i1 == i2
+            continue
+        end
+        total_overlap = true
+        for (e1, e2) in Iterators.zip(np1, np2)
+            total_overlap = total_overlap && isequal(e1,e2)
+        end
+        if total_overlap
+            throw(
+                ArgumentError(
+                    "Two ColumnDefinitions have total overlap in their paths:\n$np1\n$np2"
+                )
+            )
+        end
 
+    end
+end
