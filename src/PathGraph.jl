@@ -1,150 +1,111 @@
-module PathGraph
 using SumTypes
-using ..ColumnSetManagers: ColumnSetManager, NameID, get_id, unnamed_id, unnamed, top_level_id, get_id_for_path
-using ..NestedIterators: RawNestedIterator
-using ..ColumnDefinitions
-using ..ColumnDefinitions:  ColumnDefinition, 
-                            get_unique_current_names, 
-                            get_field_path, 
-                            get_pool_arrays, 
-                            get_default_value, 
-                            get_column_name,
-                            has_more_keys,
-                            current_path_name,
-                            make_column_def_child_copies
-import ..get_name
 
-# Nodes are keys in the graph of the data source. 
-@sum_type Node :hidden begin
-    Path(::NameID, ::Vector{Node})
-    Value(::NameID, ::NameID, ::NameID, ::Bool, ::Ref{RawNestedIterator})
-    Simple(::NameID)
+@sum_type PathNode :hidden begin
+    NothingNode()
+    TopLevelNode(
+        children::Vector{PathNode}
+    )
+    BranchNode(
+        name::Any,
+        children::Vector{PathNode}
+    )
+    LeafNode(
+        name::Any,
+        column_definition::ColumnDefinition
+    )
+end
+function Node(name, children)
+    return PathNode'.BranchNode(name, children)
+end
+function LeafNode(name_path::NamePath; kwargs...)
+    LeafNode(ColumnDefinition(name_path); kwargs...)
+end
+function LeafNode(column_definition::ColumnDefinition; _...)
+    name = last(get_name_path(column_definition))
+    return PathNode'.LeafNode(name, column_definition)
+end
+function NothingNode()
+    return PathNode'.NothingNode()
 end
 
-"""A PathNode represents a Node which has children"""
-PathNode(csm::ColumnSetManager, name, children::Vector{Node}) = PathNode(get_id(csm, name), children)
-PathNode(name::NameID, children::Vector{Node}) = Node'.Path(name, children)
-
-"""A Value node represents a Node that points to a leaf value in the data source."""
-function ValueNode(csm::ColumnSetManager, name, final_name, field_path, pool_arrays::Bool, default::RawNestedIterator)
-    ValueNode(get_id(csm, name),  get_id(csm, final_name),  get_id_for_path(csm, field_path), pool_arrays, default)
-end
-ValueNode(name::NameID, final_name::NameID, field_path::NameID, pool_arrays::Bool, default::RawNestedIterator) = Node'.Value(name, final_name, field_path, pool_arrays, Ref{RawNestedIterator}(default))
-
-"""Simple node is a placeholder type for creating symmetry in the algorithm when not using ColumnDefinitions"""
-SimpleNode(csm::ColumnSetManager, name) = SimpleNode(get_id(csm, name))
-SimpleNode(name::NameID) = Node'.Simple(name)
-
-##### Node accessor functions #####
-###################################
-function get_name(node::Node)
-    return @cases node begin 
-        Path(n,_) => n
-        Value(n,_,_,_,_) => n
-        Simple(n) => n
-    end
-end
-function get_children(node::Node)
-    return @cases node begin 
-        Path(_,c) => c
-        [Value,Simple] => throw(ErrorException("Value and Simple nodes do not have children"))
-    end
-end
-function get_final_name(node::Node)
-    return @cases node begin 
-        [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a final_name"))
-        Value(_,n,_,_,_) => n
-    end
-end
-function ColumnDefinitions.get_field_path(node::Node)
-    return @cases node begin 
-        [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a field_path"))
-        Value(_,_,p,_,_) => p
-    end
-end
-function ColumnDefinitions.get_pool_arrays(node::Node)
-    return @cases node begin 
-        [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a pool_arrays"))
-        Value(_,_,_,p,_) => p
-    end
-end
-function get_default(node::Node)
-    return @cases node begin 
-        [Path, Simple] => throw(ErrorException("Path and Simple nodes do not have a default"))
-        Value(_,_,_,_,d) => d[]
+function get_name(node::PathNode)
+    return @cases node begin
+        [BranchNode, LeafNode](name, _...) => name
+        [TopLevelNode, NothingNode] => error("Can't access name for top level or nothing node")
     end
 end
 
-
-"""Given a certain level index, return the rest of the path down to the value"""
-function path_to_value(c::Node, current_index)
-    fp = get_field_path(c)
-    return fp[current_index:end]
+function get_child_by_name(node::PathNode, name)
+    children = get_children(node)
+    i = findfirst(child -> get_name(child) == name, children)
+    isnothing(i) && error("Could not find child with name $name")
+    return children[i]
 end
 
-function get_all_value_nodes(node::Node)
-    value_node_channel = Channel{Node}() do ch
-        get_all_value_nodes(node, ch)
+function get_children(node::PathNode)
+    return @cases node begin
+        TopLevelNode(children) => children
+        BranchNode(_, children) => children
+        [LeafNode, NothingNode] => nothing
     end
-    return collect(value_node_channel)
 end
-function get_all_value_nodes(node::Node, ch)
-    @cases node begin
-        Path => get_all_value_nodes.(get_children(node), Ref(ch))
-        Value => put!(ch, node)
-        Simple => throw(ErrorException("Cannot retrieve value nodes from a simple node"))
+
+function get_default_value(node::PathNode)
+    return @cases node begin
+        LeafNode(_, column_definition) => column_definition.default_value
+        [BranchNode, TopLevelNode] => error("Can't access default value for non-leaf node")
     end
-    return nothing
 end
 
-
-function make_path_nodes(csm, column_defs::AbstractArray{ColumnDefinition}, level = 1)
-    unique_names = get_unique_current_names(column_defs, level)
-    nodes = Vector{Node}(undef, length(unique_names))
-    for (i, unique_name) in enumerate(unique_names)
-        nodes[i] = extract_path_node(csm, column_defs, unique_name, level)
-    end
-    return nodes
-end
-
-"""Analyze the column_defs that match the unique name at this level and create a node"""
-function extract_path_node(csm, column_defs, unique_name, level)
-    matching_defs = filter(p -> current_path_name(p, level) == unique_name, column_defs)
-    are_value_nodes = [!has_more_keys(def, level) for def in matching_defs]
-    
-    all_value_nodes = all(are_value_nodes)
-    mix_of_node_types = !all_value_nodes && any(are_value_nodes)
-
-    if all_value_nodes
-        # If we got to a value node, there should only be one.
-        def = first(matching_defs)
-        return ValueNode(
-            csm, unique_name, get_column_name(def), get_field_path(def), get_pool_arrays(def), RawNestedIterator(csm, get_default_value(def))
+function get_column_definitions(node::PathNode)
+    return @cases node begin
+        LeafNode(_, column_definition) => [column_definition]
+        NothingNode => error("NothingNode has no leaves")
+        [BranchNode, TopLevelNode] => mapreduce(
+            get_column_definitions,
+            vcat,
+            get_children(node),
+            init = ColumnDefinition[]
         )
     end
-
-    with_children = view(matching_defs, .!are_value_nodes)
-    children_column_defs = make_column_def_child_copies(with_children, unique_name, level)
-
-    child_nodes = make_path_nodes(csm, children_column_defs, level+1)
-    if mix_of_node_types
-        without_child_idx = findfirst(identity, are_value_nodes)
-        without_child = matching_defs[without_child_idx]
-        value_column_node = ValueNode(
-            csm,
-            unnamed_id, 
-            get_column_name(without_child),
-            (get_field_path(without_child)..., unnamed), 
-            get_pool_arrays(without_child),
-            RawNestedIterator(csm, get_default_value(without_child))
-        )
-        push!(child_nodes, value_column_node)
-    end
-
-    return PathNode(csm, unique_name, child_nodes)
 end
 
-"""Create a graph of field_paths that models the structure of the nested data"""
-make_path_graph(csm, column_defs) = PathNode(top_level_id, make_path_nodes(csm, column_defs))
-make_path_graph(_, ::Nothing) = SimpleNode(unnamed_id)
+function make_path_graph(name_paths; kwargs...)
+    children = get_node_children(name_paths, 1; kwargs...)
+    return PathNode'.TopLevelNode(children)
+end
+make_path_graph(::Nothing; kwargs...) = NothingNode()
+
+function get_node_children(name_paths, level; kwargs...)
+    children_names = unique(np[level] for np in name_paths)
+    return PathNode[get_child_node(name_paths, name, level; kwargs...) for name in children_names]
+end
+
+function get_child_node(parent_paths, name, previous_level; kwargs...)
+    new_name_paths = filter(np -> np[previous_level] == name, parent_paths)
+    if previous_level == length(new_name_paths[1])
+        return LeafNode(only(new_name_paths); kwargs...)
+    end
+    children = get_node_children(new_name_paths, previous_level+1; kwargs...)
+    return Node(name, children)
+end
+
+function check_for_overlaps(name_paths)
+    for ((i1, np1), (i2, np2)) in Iterators.product(enumerate(name_paths), enumerate(name_paths))
+        if i1 == i2
+            continue
+        end
+        total_overlap = true
+        for (e1, e2) in Iterators.zip(np1, np2)
+            total_overlap = total_overlap && isequal(e1,e2)
+        end
+        if total_overlap
+            throw(
+                ArgumentError(
+                    "Two ColumnDefinitions have total overlap in their paths:\n$np1\n$np2"
+                )
+            )
+        end
+
+    end
 end
