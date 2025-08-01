@@ -17,7 +17,7 @@ Base.getindex(cd::ColumnDefinition, i) = get_name_path(cd)[i]
 Base.length(cd::ColumnDefinition) = length(get_name_path(cd))
 get_name_path(cd::ColumnDefinition) = cd.name_path
 
-make_path_graph(v::AbstractVector{ColumnDefinition}) = make_path_graph(get_name_path.(v))
+make_path_graph(v::AbstractVector{ColumnDefinition}; kwargs...) = make_path_graph(get_name_path.(v); kwargs...)
 
 
 struct Column
